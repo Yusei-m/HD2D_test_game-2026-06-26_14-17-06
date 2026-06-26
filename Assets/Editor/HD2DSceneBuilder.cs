@@ -11,17 +11,18 @@ using UnityEngine.SceneManagement;
 /// シーンごと全自動で構築するエディタ拡張。
 ///
 /// メニュー  Tools > HD2D > Build Walking Game Scene  を一度実行するだけで、
-///   - 地面・建物・フェンス・花壇・木などの 3D 環境
-///   - SpriteRenderer + Rigidbody + BoxCollider を備えたプレイヤー
+///   - 手続き生成のピクセルテクスチャを貼った地面・建物・フェンス・木
+///   - SpriteRenderer + Rigidbody + BoxCollider を備えたプレイヤー（接地影付き）
 ///   - 俯瞰アイソメトリック視点のカメラ（追従付き）
-///   - Bloom / Depth of Field を含む URP Global Volume
-///   - ドット絵用のテクスチャインポート設定
+///   - HD-2D らしい黄昏のライティングとカラーグレード
+///     （Bloom / Depth of Field / Tonemapping / White Balance / Vignette）
 /// をすべて生成し、即プレイ可能な状態で保存する。
 /// </summary>
 public static class HD2DSceneBuilder
 {
     private const string ScenePath = "Assets/Scenes/HD2D_Town.unity";
     private const string MatFolder = "Assets/Materials";
+    private const string TexFolder = "Assets/Textures";   // 床・壁の繰り返しテクスチャ（Sprites とは分ける）
     private const string SpriteFolder = "Assets/Sprites";
     private const string ProfilePath = "Assets/Settings/HD2D_VolumeProfile.asset";
 
@@ -29,6 +30,7 @@ public static class HD2DSceneBuilder
     public static void Build()
     {
         EnsureFolder(MatFolder);
+        EnsureFolder(TexFolder);
         EnsureFolder(SpriteFolder);
         EnsureFolder("Assets/Scenes");
 
@@ -64,28 +66,34 @@ public static class HD2DSceneBuilder
     }
 
     // ===================================================================
-    //  環境（霧・ライト・アンビエント）
+    //  環境（霧・ライト・アンビエント）— 黄昏のHD-2Dらしい空気感
     // ===================================================================
     private static void ConfigureEnvironment()
     {
-        // 背景のボケと空気感のための霧
+        // 遠景を空に溶かす霧。空の色と合わせて地平線を自然にぼかす。
+        Color skyColor = new Color(0.96f, 0.84f, 0.70f); // 黄昏の暖色
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
-        RenderSettings.fogColor = new Color(0.82f, 0.87f, 0.83f);
-        RenderSettings.fogStartDistance = 14f;
-        RenderSettings.fogEndDistance = 60f;
+        RenderSettings.fogColor = skyColor;
+        RenderSettings.fogStartDistance = 22f;
+        RenderSettings.fogEndDistance = 75f;
 
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-        RenderSettings.ambientLight = new Color(0.62f, 0.66f, 0.62f);
+        // 三色アンビエント：空は暖色、地面は冷たい影色。立体感が出る。
+        RenderSettings.ambientMode = AmbientMode.Trilight;
+        RenderSettings.ambientSkyColor = new Color(0.95f, 0.82f, 0.66f);
+        RenderSettings.ambientEquatorColor = new Color(0.62f, 0.60f, 0.58f);
+        RenderSettings.ambientGroundColor = new Color(0.24f, 0.24f, 0.28f);
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
         {
             light.type = LightType.Directional;
-            light.color = new Color(1f, 0.96f, 0.86f);
-            light.intensity = 1.05f;
+            // 低く差し込む暖かい西日。
+            light.color = new Color(1.0f, 0.83f, 0.60f);
+            light.intensity = 1.35f;
             light.shadows = LightShadows.Soft;
-            light.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
+            light.shadowStrength = 0.55f;          // 影は柔らかめ
+            light.transform.rotation = Quaternion.Euler(38f, -28f, 0f); // 低い太陽＝長い影
         }
     }
 
@@ -94,22 +102,24 @@ public static class HD2DSceneBuilder
     // ===================================================================
     private static void BuildGround()
     {
+        var grass = MakeTexturedMat("Grass", GrassTexture(), new Vector2(20f, 20f), 0.03f);
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
         ground.name = "Ground";
         ground.transform.position = Vector3.zero;
         ground.transform.localScale = new Vector3(6f, 1f, 6f); // 60 x 60
-        ground.GetComponent<Renderer>().sharedMaterial =
-            MakeMat("Grass", new Color(0.42f, 0.55f, 0.34f), 0.05f);
+        ground.GetComponent<Renderer>().sharedMaterial = grass;
 
         // 土の道（薄い箱を地面に重ねる）
-        var roadMat = MakeMat("DirtRoad", new Color(0.62f, 0.52f, 0.36f), 0.05f);
+        var dirtTex = DirtTexture();
+        var roadMat = MakeTexturedMat("DirtRoad", dirtTex, new Vector2(2f, 18f), 0.04f);
         CreateBox("Road_Main", null, new Vector3(0f, 0.02f, 0f),
             new Vector3(3.5f, 0.04f, 36f), roadMat, collider: false);
+        var roadMatCross = MakeTexturedMat("DirtRoadCross", dirtTex, new Vector2(11f, 2f), 0.04f);
         CreateBox("Road_Cross", null, new Vector3(0f, 0.02f, 4f),
-            new Vector3(22f, 0.04f, 3.5f), roadMat, collider: false);
+            new Vector3(22f, 0.04f, 3.5f), roadMatCross, collider: false);
 
         // 石畳（右の建物前）
-        var stoneMat = MakeMat("StonePath", new Color(0.74f, 0.74f, 0.7f), 0.1f);
+        var stoneMat = MakeTexturedMat("StonePath", CobbleTexture(), new Vector2(3f, 3f), 0.12f);
         CreateBox("StonePath", null, new Vector3(8f, 0.03f, -2f),
             new Vector3(7f, 0.04f, 8f), stoneMat, collider: false);
     }
@@ -121,22 +131,30 @@ public static class HD2DSceneBuilder
     {
         var root = new GameObject("Town").transform;
 
-        Color wallCream = new Color(0.90f, 0.88f, 0.80f);
-        Color wallStone = new Color(0.70f, 0.74f, 0.76f);
-        Color roofSlate = new Color(0.45f, 0.52f, 0.62f);
-        Color roofBrown = new Color(0.40f, 0.30f, 0.24f);
+        // 共有テクスチャ
+        Texture2D plasterCream = PlasterTexture("PlasterCream", new Color(0.90f, 0.86f, 0.74f));
+        Texture2D plasterStone = PlasterTexture("PlasterStone", new Color(0.74f, 0.76f, 0.76f));
+        Texture2D brick = BrickTexture();
+        Texture2D roofSlate = RoofTexture("RoofSlate", new Color(0.42f, 0.49f, 0.60f));
+        Texture2D roofBrown = RoofTexture("RoofBrown", new Color(0.44f, 0.30f, 0.24f));
+
+        var matCream = MakeTexturedMat("WallCream", plasterCream, new Vector2(2f, 2f), 0.04f);
+        var matStone = MakeTexturedMat("WallStone", plasterStone, new Vector2(2f, 2f), 0.04f);
+        var matBrick = MakeTexturedMat("WallBrick", brick, new Vector2(2f, 2f), 0.05f);
+        var matRoofSlate = MakeTexturedMat("MatRoofSlate", roofSlate, new Vector2(3f, 1.5f), 0.05f);
+        var matRoofBrown = MakeTexturedMat("MatRoofBrown", roofBrown, new Vector2(3f, 1.5f), 0.05f);
 
         // --- 家 A（左奥）---
         BuildHouse(root, "TownHouseA", new Vector3(-8f, 0f, 7f),
-            new Vector3(4f, 3f, 4f), wallCream, roofSlate);
+            new Vector3(4f, 3f, 4f), matCream, matRoofSlate);
 
         // --- 家 B（中央奥）---
         BuildHouse(root, "TownHouseB", new Vector3(-1.5f, 0f, 9f),
-            new Vector3(4f, 3.2f, 4f), wallStone, roofSlate);
+            new Vector3(4f, 3.2f, 4f), matStone, matRoofSlate);
 
         // --- 店（左手前）---
         BuildHouse(root, "Store", new Vector3(-8.5f, 0f, 0f),
-            new Vector3(3.6f, 2.6f, 3.6f), wallCream, roofBrown);
+            new Vector3(3.6f, 2.6f, 3.6f), matBrick, matRoofBrown);
         // 店のひさし
         CreateBox("Store_Awning", root, new Vector3(-8.5f, 2.0f, -1.9f),
             new Vector3(3.8f, 0.25f, 1.2f),
@@ -144,7 +162,7 @@ public static class HD2DSceneBuilder
 
         // --- 右の大きな建物（教会風・アーチ）---
         BuildHouse(root, "ChapelHouse", new Vector3(8.5f, 0f, -1f),
-            new Vector3(5f, 4f, 5.5f), wallStone, roofSlate);
+            new Vector3(5f, 4f, 5.5f), matStone, matRoofSlate);
         // アーチ（円柱を横倒し）
         var arch = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         arch.name = "Arch";
@@ -152,11 +170,10 @@ public static class HD2DSceneBuilder
         arch.transform.position = new Vector3(6.0f, 2.2f, -3.2f);
         arch.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         arch.transform.localScale = new Vector3(1.6f, 1.6f, 1.6f);
-        arch.GetComponent<Renderer>().sharedMaterial =
-            MakeMat("ArchStone", new Color(0.66f, 0.62f, 0.55f), 0.1f);
+        arch.GetComponent<Renderer>().sharedMaterial = matBrick;
 
         // --- 風車（右奥）---
-        BuildWindmill(root, new Vector3(11.5f, 0f, 8f));
+        BuildWindmill(root, new Vector3(11.5f, 0f, 8f), matCream);
 
         // --- 中央の花壇（フェンス囲い）---
         BuildFlowerPlot(root, new Vector3(-5.5f, 0f, -3.5f));
@@ -181,7 +198,7 @@ public static class HD2DSceneBuilder
     }
 
     private static void BuildHouse(Transform parent, string name, Vector3 pos,
-        Vector3 size, Color wall, Color roof)
+        Vector3 size, Material wall, Material roof)
     {
         var go = new GameObject(name).transform;
         go.SetParent(parent);
@@ -189,23 +206,30 @@ public static class HD2DSceneBuilder
 
         // 壁（本体）
         CreateBox(name + "_Body", go,
-            pos + new Vector3(0f, size.y * 0.5f, 0f), size,
-            MakeMat("Wall_" + ColorKey(wall), wall, 0.05f));
+            pos + new Vector3(0f, size.y * 0.5f, 0f), size, wall);
 
         // 屋根（少し大きい平たい箱）
         CreateBox(name + "_Roof", go,
             pos + new Vector3(0f, size.y + 0.35f, 0f),
-            new Vector3(size.x * 1.15f, 0.7f, size.z * 1.15f),
-            MakeMat("Roof_" + ColorKey(roof), roof, 0.05f));
+            new Vector3(size.x * 1.15f, 0.7f, size.z * 1.15f), roof);
 
         // ドア
         CreateBox(name + "_Door", go,
             pos + new Vector3(0f, 0.7f, -size.z * 0.5f - 0.02f),
             new Vector3(0.9f, 1.4f, 0.1f),
-            MakeMat("Door", new Color(0.45f, 0.32f, 0.22f), 0.1f));
+            MakeMat("Door", new Color(0.40f, 0.27f, 0.18f), 0.1f));
+
+        // 窓（暖色に灯る）
+        var winMat = MakeMat("Window", new Color(0.95f, 0.78f, 0.45f), 0.3f,
+            emission: new Color(0.9f, 0.6f, 0.28f) * 1.3f);
+        float wz = -size.z * 0.5f - 0.03f;
+        CreateBox(name + "_WinL", go, pos + new Vector3(-size.x * 0.27f, size.y * 0.62f, wz),
+            new Vector3(0.7f, 0.7f, 0.08f), winMat, collider: false);
+        CreateBox(name + "_WinR", go, pos + new Vector3(size.x * 0.27f, size.y * 0.62f, wz),
+            new Vector3(0.7f, 0.7f, 0.08f), winMat, collider: false);
     }
 
-    private static void BuildWindmill(Transform parent, Vector3 pos)
+    private static void BuildWindmill(Transform parent, Vector3 pos, Material wallMat)
     {
         var root = new GameObject("Windmill").transform;
         root.SetParent(parent);
@@ -216,8 +240,7 @@ public static class HD2DSceneBuilder
         body.transform.SetParent(root);
         body.transform.position = pos + new Vector3(0f, 2.2f, 0f);
         body.transform.localScale = new Vector3(2.4f, 2.2f, 2.4f);
-        body.GetComponent<Renderer>().sharedMaterial =
-            MakeMat("Wall_windmill", new Color(0.88f, 0.85f, 0.78f), 0.05f);
+        body.GetComponent<Renderer>().sharedMaterial = wallMat;
 
         // 羽（薄い箱を十字に）
         var bladeMat = MakeMat("Blade", new Color(0.55f, 0.42f, 0.32f), 0.1f);
@@ -238,7 +261,7 @@ public static class HD2DSceneBuilder
         root.SetParent(parent);
         root.position = center;
 
-        var fenceMat = MakeMat("Fence", new Color(0.5f, 0.38f, 0.26f), 0.1f);
+        var fenceMat = MakeTexturedMat("Fence", WoodTexture(), new Vector2(3f, 1f), 0.1f);
         float half = 2.2f;
         // 4辺のフェンス（支柱＋横木）
         for (int s = 0; s < 4; s++)
@@ -262,6 +285,12 @@ public static class HD2DSceneBuilder
         };
         foreach (var c in corners)
             CreateBox("Post", root, center + c, new Vector3(0.2f, 0.9f, 0.2f), postMat);
+
+        // 花壇の土
+        CreateBox("PlotSoil", root, center + new Vector3(0f, 0.05f, 0f),
+            new Vector3(half * 1.9f, 0.1f, half * 1.9f),
+            MakeTexturedMat("PlotSoil", DirtTexture(), new Vector2(2f, 2f), 0.04f),
+            collider: false);
     }
 
     private static void BuildTree(Transform parent, Vector3 pos)
@@ -278,13 +307,23 @@ public static class HD2DSceneBuilder
         trunk.GetComponent<Renderer>().sharedMaterial =
             MakeMat("Trunk", new Color(0.4f, 0.28f, 0.18f), 0.1f);
 
+        // ふっくらした葉（球を3つ重ねてモコモコに）
+        var foliageMat = MakeMat("Foliage", new Color(0.30f, 0.45f, 0.26f), 0.05f);
+        var foliageMat2 = MakeMat("FoliageHi", new Color(0.38f, 0.54f, 0.30f), 0.05f);
+        AddFoliageBlob(root, pos + new Vector3(0f, 2.6f, 0f), 2.6f, foliageMat);
+        AddFoliageBlob(root, pos + new Vector3(-0.9f, 2.2f, 0.3f), 1.7f, foliageMat2);
+        AddFoliageBlob(root, pos + new Vector3(0.9f, 2.3f, -0.2f), 1.7f, foliageMat2);
+    }
+
+    private static void AddFoliageBlob(Transform parent, Vector3 pos, float diameter, Material mat)
+    {
         var foliage = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         foliage.name = "Foliage";
-        foliage.transform.SetParent(root);
-        foliage.transform.position = pos + new Vector3(0f, 2.6f, 0f);
-        foliage.transform.localScale = new Vector3(2.4f, 2.8f, 2.4f);
-        foliage.GetComponent<Renderer>().sharedMaterial =
-            MakeMat("Foliage", new Color(0.30f, 0.45f, 0.26f), 0.05f);
+        foliage.transform.SetParent(parent);
+        foliage.transform.position = pos;
+        foliage.transform.localScale = Vector3.one * diameter;
+        foliage.GetComponent<Renderer>().sharedMaterial = mat;
+        Object.DestroyImmediate(foliage.GetComponent<Collider>());
     }
 
     // ===================================================================
@@ -308,6 +347,17 @@ public static class HD2DSceneBuilder
         box.center = new Vector3(0f, 0f, 0f);
 
         player.AddComponent<PlayerController>();
+
+        // 接地影（地面に寝かせた柔らかい円スプライト）
+        var shadowGo = new GameObject("Shadow");
+        shadowGo.transform.SetParent(player.transform);
+        shadowGo.transform.localPosition = new Vector3(0f, -0.88f, 0f);
+        shadowGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // 地面に水平
+        shadowGo.transform.localScale = Vector3.one * 1.6f;
+        var shadowSr = shadowGo.AddComponent<SpriteRenderer>();
+        shadowSr.sprite = GenerateBlobShadowSprite();
+        shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
+        shadowSr.sortingOrder = -1; // 常にキャラの背面へ
 
         // スプライト（子オブジェクト・ビルボード）
         Sprite sprite = GenerateCharacterSprite();
@@ -344,7 +394,7 @@ public static class HD2DSceneBuilder
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane = 200f;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.80f, 0.85f, 0.82f);
+        cam.backgroundColor = new Color(0.96f, 0.84f, 0.70f); // 黄昏の空（霧色と一致）
 
         var data = cam.GetUniversalAdditionalCameraData();
         data.renderPostProcessing = true;
@@ -357,24 +407,49 @@ public static class HD2DSceneBuilder
     }
 
     // ===================================================================
-    //  ポストプロセス（Global Volume）
+    //  ポストプロセス（Global Volume）— HD-2D の肝になるカラーグレード
     // ===================================================================
     private static void BuildGlobalVolume()
     {
         VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
         AssetDatabase.CreateAsset(profile, ProfilePath);
 
+        // 光の溢れ（ジオラマの宝石のような輝き）
         var bloom = profile.Add<Bloom>(true);
-        bloom.intensity.Override(1.3f);
-        bloom.threshold.Override(0.85f);
-        bloom.scatter.Override(0.78f);
-        bloom.tint.Override(new Color(1f, 0.98f, 0.92f));
+        bloom.intensity.Override(1.1f);
+        bloom.threshold.Override(0.9f);
+        bloom.scatter.Override(0.72f);
+        bloom.tint.Override(new Color(1f, 0.95f, 0.85f));
 
+        // 背景ボケ（ミニチュア感）
         var dof = profile.Add<DepthOfField>(true);
         dof.mode.Override(DepthOfFieldMode.Bokeh);
         dof.focusDistance.Override(13f);  // プレイヤー付近にピント
-        dof.focalLength.Override(110f);   // 背景を大きくボカす
+        dof.focalLength.Override(95f);    // 背景を大きくボカす
         dof.aperture.Override(5.6f);
+
+        // フィルム調のトーン（白飛び・黒つぶれを抑え、立体的な階調に）
+        var tone = profile.Add<Tonemapping>(true);
+        tone.mode.Override(TonemappingMode.ACES);
+
+        // 暖色のホワイトバランス＝黄昏の空気
+        var wb = profile.Add<WhiteBalance>(true);
+        wb.temperature.Override(15f);
+        wb.tint.Override(4f);
+
+        // 彩度・コントラストを少し持ち上げ、絵本的な色に
+        var ca = profile.Add<ColorAdjustments>(true);
+        ca.postExposure.Override(0.12f);
+        ca.contrast.Override(12f);
+        ca.saturation.Override(16f);
+        ca.colorFilter.Override(new Color(1.0f, 0.97f, 0.92f));
+
+        // 四隅を落として中央（プレイヤー）へ視線を集める
+        var vig = profile.Add<Vignette>(true);
+        vig.color.Override(new Color(0.10f, 0.06f, 0.05f));
+        vig.intensity.Override(0.32f);
+        vig.smoothness.Override(0.55f);
+        vig.rounded.Override(true);
 
         EditorUtility.SetDirty(profile);
         AssetDatabase.SaveAssets();
@@ -387,7 +462,7 @@ public static class HD2DSceneBuilder
     }
 
     // ===================================================================
-    //  ヘルパー
+    //  マテリアル・ヘルパー
     // ===================================================================
     private static GameObject CreateBox(string name, Transform parent,
         Vector3 worldPos, Vector3 size, Material mat, bool collider = true)
@@ -430,39 +505,148 @@ public static class HD2DSceneBuilder
         return mat;
     }
 
-    /// <summary>
-    /// 主人公（赤キャップのトレーナー風）のドット絵スプライトを
-    /// プログラムで生成し、Point/None 設定でインポートして返す。
-    /// </summary>
-    private static Sprite GenerateCharacterSprite()
+    private static Material MakeTexturedMat(string key, Texture2D tex, Vector2 tiling,
+        float smoothness)
     {
-        string path = SpriteFolder + "/player.png";
+        string path = MatFolder + "/" + key + ".mat";
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
 
-        const int W = 16, H = 24;
-        var tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
-        var clear = new Color(0, 0, 0, 0);
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
-                tex.SetPixel(x, y, clear);
+        var shader = Shader.Find("Universal Render Pipeline/Lit");
+        var mat = new Material(shader);
+        mat.SetColor("_BaseColor", Color.white);
+        mat.SetTexture("_BaseMap", tex);
+        mat.SetTextureScale("_BaseMap", tiling);
+        mat.SetFloat("_Smoothness", smoothness);
+        mat.SetFloat("_Metallic", 0f);
 
-        Color cap = new Color(0.83f, 0.20f, 0.20f);
-        Color skin = new Color(0.96f, 0.80f, 0.62f);
-        Color jacket = new Color(0.88f, 0.88f, 0.92f);
-        Color pack = new Color(0.80f, 0.30f, 0.28f);
-        Color pants = new Color(0.20f, 0.26f, 0.45f);
-        Color shoe = new Color(0.15f, 0.15f, 0.18f);
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
 
-        // y=0 が足元。上に向かって積み上げる。
-        FillRect(tex, 4, 0, 7, 2, shoe);      // 左足
-        FillRect(tex, 8, 0, 11, 2, shoe);     // 右足
-        FillRect(tex, 4, 2, 11, 8, pants);    // ズボン
-        FillRect(tex, 3, 8, 12, 15, jacket);  // 上着
-        FillRect(tex, 11, 9, 13, 14, pack);   // バックパック
-        FillRect(tex, 5, 15, 10, 19, skin);   // 顔
-        FillRect(tex, 4, 19, 11, 21, cap);    // キャップ本体
-        FillRect(tex, 4, 18, 12, 19, cap);    // つば
-        FillRect(tex, 5, 21, 10, 23, cap);    // キャップ上部
+    // ===================================================================
+    //  手続き生成テクスチャ（ピクセルアート）
+    // ===================================================================
+    private static Texture2D GrassTexture()
+    {
+        return MakeTexture("grass", 64, (x, y, rng) =>
+        {
+            float n = (float)rng.NextDouble();
+            Color baseCol = Color.Lerp(
+                new Color(0.34f, 0.46f, 0.27f), new Color(0.45f, 0.58f, 0.33f), n);
+            // たまに濃い草の束
+            if (rng.NextDouble() < 0.06)
+                baseCol *= 0.8f;
+            // 小さな白/黄の花
+            if (rng.NextDouble() < 0.015)
+                baseCol = (rng.NextDouble() < 0.5)
+                    ? new Color(0.95f, 0.95f, 0.85f)
+                    : new Color(0.95f, 0.82f, 0.45f);
+            return baseCol;
+        });
+    }
 
+    private static Texture2D DirtTexture()
+    {
+        return MakeTexture("dirt", 64, (x, y, rng) =>
+        {
+            float n = (float)rng.NextDouble();
+            Color baseCol = Color.Lerp(
+                new Color(0.55f, 0.44f, 0.30f), new Color(0.66f, 0.54f, 0.38f), n);
+            if (rng.NextDouble() < 0.05) baseCol *= 0.78f; // 小石・轍
+            return baseCol;
+        });
+    }
+
+    private static Texture2D CobbleTexture()
+    {
+        return MakeTexture("cobble", 64, (x, y, rng) =>
+        {
+            int cx = x / 16, cy = y / 16;
+            // セルごとに色を固定したいので、座標から擬似乱数を生成
+            float h = Frac(Mathf.Sin(cx * 12.9898f + cy * 78.233f) * 43758.5453f);
+            Color stone = Color.Lerp(
+                new Color(0.62f, 0.62f, 0.60f), new Color(0.80f, 0.79f, 0.74f), h);
+            // 目地（溝）
+            if (x % 16 < 2 || y % 16 < 2)
+                stone = new Color(0.34f, 0.33f, 0.32f);
+            stone *= 0.92f + 0.08f * (float)rng.NextDouble();
+            return stone;
+        });
+    }
+
+    private static Texture2D BrickTexture()
+    {
+        return MakeTexture("brick", 64, (x, y, rng) =>
+        {
+            int row = y / 16;
+            int offset = (row % 2 == 0) ? 0 : 16;
+            int bx = (x + offset) % 32;
+            // モルタル目地
+            if (y % 16 < 2 || bx < 2)
+                return new Color(0.78f, 0.74f, 0.66f);
+            float h = (float)rng.NextDouble();
+            return Color.Lerp(
+                new Color(0.62f, 0.34f, 0.27f), new Color(0.74f, 0.42f, 0.33f), h);
+        });
+    }
+
+    private static Texture2D PlasterTexture(string key, Color tint)
+    {
+        return MakeTexture(key.ToLowerInvariant(), 64, (x, y, rng) =>
+        {
+            float n = ((float)rng.NextDouble() - 0.5f) * 0.10f;
+            Color c = tint + new Color(n, n, n);
+            // ほのかな横木のライン（木組み風）
+            if (y % 32 == 0) c *= 0.9f;
+            return c;
+        });
+    }
+
+    private static Texture2D RoofTexture(string key, Color tint)
+    {
+        return MakeTexture(key.ToLowerInvariant(), 64, (x, y, rng) =>
+        {
+            int rowH = 12;
+            int yy = y % rowH;
+            // 瓦の段：上側を濃く、下端をハイライト
+            float shade = Mathf.Lerp(0.78f, 1.08f, yy / (float)rowH);
+            int seamOffset = ((y / rowH) % 2 == 0) ? 0 : 8;
+            Color c = tint * shade;
+            if ((x + seamOffset) % 16 < 2) c *= 0.7f;     // 瓦の縦の継ぎ目
+            if (yy < 1) c *= 0.6f;                          // 段の影
+            c *= 0.96f + 0.04f * (float)rng.NextDouble();
+            return c;
+        });
+    }
+
+    private static Texture2D WoodTexture()
+    {
+        return MakeTexture("wood", 64, (x, y, rng) =>
+        {
+            float grain = Mathf.Sin(x * 0.6f) * 0.5f + 0.5f;
+            Color c = Color.Lerp(
+                new Color(0.46f, 0.33f, 0.21f), new Color(0.58f, 0.43f, 0.28f), grain);
+            c *= 0.95f + 0.05f * (float)rng.NextDouble();
+            return c;
+        });
+    }
+
+    /// <summary>共通テクスチャ生成：Repeat/Point/無圧縮で取り込み Texture2D を返す。</summary>
+    private static Texture2D MakeTexture(string key, int size,
+        System.Func<int, int, System.Random, Color> fn)
+    {
+        string path = TexFolder + "/" + key + ".png";
+
+        var rng = new System.Random(key.GetHashCode());
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                Color c = fn(x, y, rng);
+                c.a = 1f;
+                tex.SetPixel(x, y, c);
+            }
         tex.Apply();
 
         string abs = Path.Combine(Directory.GetCurrentDirectory(), path);
@@ -472,17 +656,118 @@ public static class HD2DSceneBuilder
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
 
         var ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.textureType = TextureImporterType.Default;
+        ti.wrapMode = TextureWrapMode.Repeat;
+        ti.filterMode = FilterMode.Point;     // くっきりしたドット
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.mipmapEnabled = true;              // 遠景のチラつき防止
+        ti.sRGBTexture = true;
+        ti.SaveAndReimport();
+
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    private static float Frac(float v) => v - Mathf.Floor(v);
+
+    // ===================================================================
+    //  キャラクター・スプライト生成
+    // ===================================================================
+    /// <summary>
+    /// 主人公（赤キャップの旅人）のドット絵スプライトを生成して返す。
+    /// アウトラインと陰影付きで、24x32 解像度。
+    /// </summary>
+    private static Sprite GenerateCharacterSprite()
+    {
+        const int W = 24, H = 32;
+        var tex = new Texture2D(W, H, TextureFormat.RGBA32, false);
+        var clear = new Color(0, 0, 0, 0);
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                tex.SetPixel(x, y, clear);
+
+        Color cap = new Color(0.84f, 0.22f, 0.20f);
+        Color capDark = new Color(0.62f, 0.15f, 0.15f);
+        Color skin = new Color(0.96f, 0.80f, 0.62f);
+        Color jacket = new Color(0.30f, 0.55f, 0.78f);   // 青いマント風の上着
+        Color jacketDark = new Color(0.22f, 0.42f, 0.62f);
+        Color pack = new Color(0.78f, 0.55f, 0.30f);
+        Color pants = new Color(0.30f, 0.30f, 0.36f);
+        Color shoe = new Color(0.16f, 0.13f, 0.12f);
+        Color eye = new Color(0.15f, 0.12f, 0.18f);
+
+        // y=0 が足元。上に積み上げる。
+        FillRect(tex, 7, 0, 11, 3, shoe);        // 左足
+        FillRect(tex, 13, 0, 17, 3, shoe);       // 右足
+        FillRect(tex, 7, 3, 11, 7, pants);       // 左脚
+        FillRect(tex, 13, 3, 17, 7, pants);      // 右脚
+        FillRect(tex, 7, 6, 17, 12, pants);      // 腰
+        FillRect(tex, 6, 12, 18, 21, jacket);    // 胴（上着）
+        FillRect(tex, 5, 13, 7, 19, jacket);     // 左腕
+        FillRect(tex, 17, 13, 19, 19, jacket);   // 右腕
+        FillRect(tex, 16, 13, 20, 20, pack);     // 背負い袋（右側）
+        FillRect(tex, 10, 21, 14, 23, skin);     // 首
+        FillRect(tex, 8, 22, 16, 28, skin);      // 顔
+        FillRect(tex, 7, 27, 17, 29, cap);       // つば
+        FillRect(tex, 8, 28, 16, 32, cap);       // 帽子本体
+        FillRect(tex, 8, 27, 16, 28, capDark);   // 帽子の影
+        FillRect(tex, 10, 25, 11, 26, eye);      // 左目
+        FillRect(tex, 13, 25, 14, 26, eye);      // 右目
+
+        // 簡単な陰影：右側（x>=13）を少し暗く
+        Shade(tex, 13, 0, W, H, 0.86f);
+        // 上着の縦ライン（前合わせ）
+        FillRect(tex, 11, 12, 13, 21, jacketDark);
+
+        // 1px ダークアウトライン
+        AddOutline(tex, new Color(0.10f, 0.08f, 0.12f, 1f));
+
+        tex.Apply();
+        return WriteSprite("player", tex, SpriteAlignment.BottomCenter);
+    }
+
+    /// <summary>足元に敷く柔らかい円形の接地影スプライト。</summary>
+    private static Sprite GenerateBlobShadowSprite()
+    {
+        const int S = 64;
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        float c = (S - 1) * 0.5f;
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float dx = (x - c) / c;
+                float dy = (y - c) / c;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.Clamp01(1f - d);
+                a = a * a; // 中心が濃く外周がふんわり消える
+                tex.SetPixel(x, y, new Color(0f, 0f, 0f, a));
+            }
+        tex.Apply();
+        return WriteSprite("blob_shadow", tex, SpriteAlignment.Center);
+    }
+
+    private static Sprite WriteSprite(string key, Texture2D tex, SpriteAlignment align)
+    {
+        string path = SpriteFolder + "/" + key + ".png";
+        string abs = Path.Combine(Directory.GetCurrentDirectory(), path);
+        File.WriteAllBytes(abs, tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+        // PixelSpriteImportSettings が /Sprites/ を Point/Sprite に強制するが、
+        // alignment だけここで上書きする。
+        var ti = (TextureImporter)AssetImporter.GetAtPath(path);
         ti.textureType = TextureImporterType.Sprite;
         ti.spriteImportMode = SpriteImportMode.Single;
         ti.filterMode = FilterMode.Point;
         ti.textureCompression = TextureImporterCompression.Uncompressed;
-        ti.spritePixelsPerUnit = 32f;
         ti.mipmapEnabled = false;
         ti.alphaIsTransparency = true;
+        ti.spritePixelsPerUnit = 32f;
 
         var settings = new TextureImporterSettings();
         ti.ReadTextureSettings(settings);
-        settings.spriteAlignment = (int)SpriteAlignment.BottomCenter;
+        settings.spriteAlignment = (int)align;
         ti.SetTextureSettings(settings);
         ti.SaveAndReimport();
 
@@ -497,6 +782,41 @@ public static class HD2DSceneBuilder
                     tex.SetPixel(x, y, c);
     }
 
+    /// <summary>指定範囲の不透明ピクセルを暗くする（簡易陰影）。</summary>
+    private static void Shade(Texture2D tex, int x0, int y0, int x1, int y1, float mul)
+    {
+        for (int y = y0; y < y1 && y < tex.height; y++)
+            for (int x = x0; x < x1 && x < tex.width; x++)
+            {
+                Color c = tex.GetPixel(x, y);
+                if (c.a > 0.5f)
+                    tex.SetPixel(x, y, new Color(c.r * mul, c.g * mul, c.b * mul, c.a));
+            }
+    }
+
+    /// <summary>透明ピクセルのうち、不透明ピクセルに隣接する箇所をアウトライン色で塗る。</summary>
+    private static void AddOutline(Texture2D tex, Color outline)
+    {
+        int w = tex.width, h = tex.height;
+        var src = tex.GetPixels();
+        bool Opaque(int x, int y)
+        {
+            if (x < 0 || x >= w || y < 0 || y >= h) return false;
+            return src[y * w + x].a > 0.5f;
+        }
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (src[y * w + x].a > 0.5f) continue;
+                if (Opaque(x - 1, y) || Opaque(x + 1, y) ||
+                    Opaque(x, y - 1) || Opaque(x, y + 1))
+                    tex.SetPixel(x, y, outline);
+            }
+    }
+
+    // ===================================================================
+    //  汎用ヘルパー
+    // ===================================================================
     private static void EnsureFolder(string path)
     {
         if (AssetDatabase.IsValidFolder(path)) return;
@@ -514,12 +834,5 @@ public static class HD2DSceneBuilder
             if (s.path == path) return;
         scenes.Insert(0, new EditorBuildSettingsScene(path, true));
         EditorBuildSettings.scenes = scenes.ToArray();
-    }
-
-    private static string ColorKey(Color c)
-    {
-        return Mathf.RoundToInt(c.r * 255) + "_" +
-               Mathf.RoundToInt(c.g * 255) + "_" +
-               Mathf.RoundToInt(c.b * 255);
     }
 }
