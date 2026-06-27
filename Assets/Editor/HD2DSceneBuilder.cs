@@ -70,30 +70,31 @@ public static class HD2DSceneBuilder
     // ===================================================================
     private static void ConfigureEnvironment()
     {
-        // 遠景を空に溶かす霧。空の色と合わせて地平線を自然にぼかす。
-        Color skyColor = new Color(0.96f, 0.84f, 0.70f); // 黄昏の暖色
+        // 参考画像のような、霧に包まれた緑がかった森の朝の空気感。
+        // 近めで濃いソフトな霧をかけ、遠景を白緑に溶かす。
+        Color skyColor = new Color(0.84f, 0.90f, 0.84f); // 霧の白緑
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
         RenderSettings.fogColor = skyColor;
-        RenderSettings.fogStartDistance = 22f;
-        RenderSettings.fogEndDistance = 75f;
+        RenderSettings.fogStartDistance = 10f;
+        RenderSettings.fogEndDistance = 52f;
 
-        // 三色アンビエント：空は暖色、地面は冷たい影色。立体感が出る。
+        // 三色アンビエント：空は明るい白緑、地面は深い緑の影色。
         RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.95f, 0.82f, 0.66f);
-        RenderSettings.ambientEquatorColor = new Color(0.62f, 0.60f, 0.58f);
-        RenderSettings.ambientGroundColor = new Color(0.24f, 0.24f, 0.28f);
+        RenderSettings.ambientSkyColor = new Color(0.86f, 0.92f, 0.84f);
+        RenderSettings.ambientEquatorColor = new Color(0.58f, 0.66f, 0.56f);
+        RenderSettings.ambientGroundColor = new Color(0.20f, 0.26f, 0.20f);
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
         {
             light.type = LightType.Directional;
-            // 低く差し込む暖かい西日。
-            light.color = new Color(1.0f, 0.83f, 0.60f);
-            light.intensity = 1.35f;
+            // 霧を通した柔らかい白い陽光（やや緑寄り）。
+            light.color = new Color(0.96f, 0.98f, 0.92f);
+            light.intensity = 1.05f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.55f;          // 影は柔らかめ
-            light.transform.rotation = Quaternion.Euler(38f, -28f, 0f); // 低い太陽＝長い影
+            light.shadowStrength = 0.4f;           // 境界の曖昧な柔らかい影
+            light.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
         }
     }
 
@@ -291,6 +292,25 @@ public static class HD2DSceneBuilder
             new Vector3(half * 1.9f, 0.1f, half * 1.9f),
             MakeTexturedMat("PlotSoil", DirtTexture(), new Vector2(2f, 2f), 0.04f),
             collider: false);
+
+        // 参考画像のような、青いクリスタル花と白い花を多数自然に配置。
+        var blue = MakeMat("CrystalBlue", new Color(0.40f, 0.72f, 0.96f), 0.4f,
+            emission: new Color(0.30f, 0.62f, 0.95f) * 2.2f);
+        var white = MakeMat("FlowerWhite", new Color(0.95f, 0.97f, 0.98f), 0.3f,
+            emission: new Color(0.55f, 0.62f, 0.66f) * 1.2f);
+        var rng = new System.Random(20260627);
+        // 左半分を青、右半分を白に寄せつつ、ばらつかせる。
+        for (int i = 0; i < 26; i++)
+        {
+            float fx = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+            float fz = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+            bool isBlue = fx < (rng.NextDouble() - 0.5) * 0.6;
+            float h = 0.18f + (float)rng.NextDouble() * 0.22f;
+            CreateBox(isBlue ? "FlowerBlue" : "FlowerWhite", root,
+                center + new Vector3(fx, 0.1f + h * 0.5f, fz),
+                new Vector3(0.18f, h, 0.18f),
+                isBlue ? blue : white, collider: false);
+        }
     }
 
     private static void BuildTree(Transform parent, Vector3 pos)
@@ -394,7 +414,7 @@ public static class HD2DSceneBuilder
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane = 200f;
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.96f, 0.84f, 0.70f); // 黄昏の空（霧色と一致）
+        cam.backgroundColor = new Color(0.84f, 0.90f, 0.84f); // 霧の白緑（霧色と一致）
 
         var data = cam.GetUniversalAdditionalCameraData();
         data.renderPostProcessing = true;
@@ -414,41 +434,41 @@ public static class HD2DSceneBuilder
         VolumeProfile profile = ScriptableObject.CreateInstance<VolumeProfile>();
         AssetDatabase.CreateAsset(profile, ProfilePath);
 
-        // 光の溢れ（ジオラマの宝石のような輝き）
+        // 光の溢れ（参考画像のような、画面全体が光の霧に溶けるソフト発光）
         var bloom = profile.Add<Bloom>(true);
-        bloom.intensity.Override(1.1f);
-        bloom.threshold.Override(0.9f);
-        bloom.scatter.Override(0.72f);
-        bloom.tint.Override(new Color(1f, 0.95f, 0.85f));
+        bloom.intensity.Override(3.8f);   // 大幅に強く
+        bloom.threshold.Override(0.7f);   // 明るい部分が広くボケて輝く
+        bloom.scatter.Override(0.85f);    // 光が大きく広がる
+        bloom.tint.Override(new Color(0.95f, 1f, 0.96f)); // やや緑寄りの白
 
-        // 背景ボケ（ミニチュア感）
+        // 背景ボケ（ミニチュア感・背景を大きく自然にボカす）
         var dof = profile.Add<DepthOfField>(true);
         dof.mode.Override(DepthOfFieldMode.Bokeh);
         dof.focusDistance.Override(13f);  // プレイヤー付近にピント
-        dof.focalLength.Override(95f);    // 背景を大きくボカす
-        dof.aperture.Override(5.6f);
+        dof.focalLength.Override(125f);   // 背景を大きくボカす
+        dof.aperture.Override(2.0f);      // 絞り開放＝浅い被写界深度
 
         // フィルム調のトーン（白飛び・黒つぶれを抑え、立体的な階調に）
         var tone = profile.Add<Tonemapping>(true);
         tone.mode.Override(TonemappingMode.ACES);
 
-        // 暖色のホワイトバランス＝黄昏の空気
+        // 緑がかった涼やかなホワイトバランス＝霧の朝
         var wb = profile.Add<WhiteBalance>(true);
-        wb.temperature.Override(15f);
-        wb.tint.Override(4f);
+        wb.temperature.Override(-8f);
+        wb.tint.Override(10f);            // 緑方向へ
 
-        // 彩度・コントラストを少し持ち上げ、絵本的な色に
+        // 霧の空気に合わせ、彩度はやや控えめ・緑のフィルタ
         var ca = profile.Add<ColorAdjustments>(true);
-        ca.postExposure.Override(0.12f);
-        ca.contrast.Override(12f);
-        ca.saturation.Override(16f);
-        ca.colorFilter.Override(new Color(1.0f, 0.97f, 0.92f));
+        ca.postExposure.Override(0.18f);
+        ca.contrast.Override(8f);
+        ca.saturation.Override(4f);
+        ca.colorFilter.Override(new Color(0.92f, 1.0f, 0.95f));
 
         // 四隅を落として中央（プレイヤー）へ視線を集める
         var vig = profile.Add<Vignette>(true);
-        vig.color.Override(new Color(0.10f, 0.06f, 0.05f));
-        vig.intensity.Override(0.32f);
-        vig.smoothness.Override(0.55f);
+        vig.color.Override(new Color(0.06f, 0.09f, 0.07f));
+        vig.intensity.Override(0.28f);
+        vig.smoothness.Override(0.6f);
         vig.rounded.Override(true);
 
         EditorUtility.SetDirty(profile);
@@ -532,16 +552,20 @@ public static class HD2DSceneBuilder
         return MakeTexture("grass", 64, (x, y, rng) =>
         {
             float n = (float)rng.NextDouble();
+            // みずみずしい深緑〜明るい緑
             Color baseCol = Color.Lerp(
-                new Color(0.34f, 0.46f, 0.27f), new Color(0.45f, 0.58f, 0.33f), n);
-            // たまに濃い草の束
-            if (rng.NextDouble() < 0.06)
-                baseCol *= 0.8f;
-            // 小さな白/黄の花
-            if (rng.NextDouble() < 0.015)
+                new Color(0.26f, 0.46f, 0.24f), new Color(0.40f, 0.62f, 0.32f), n);
+            // 濃い草の束（影になった草むら）
+            if (rng.NextDouble() < 0.10)
+                baseCol *= 0.74f;
+            // ハイライトの草先
+            else if (rng.NextDouble() < 0.06)
+                baseCol = Color.Lerp(baseCol, new Color(0.55f, 0.74f, 0.40f), 0.6f);
+            // 小さな白/青の花のドット
+            if (rng.NextDouble() < 0.012)
                 baseCol = (rng.NextDouble() < 0.5)
-                    ? new Color(0.95f, 0.95f, 0.85f)
-                    : new Color(0.95f, 0.82f, 0.45f);
+                    ? new Color(0.92f, 0.95f, 0.95f)
+                    : new Color(0.55f, 0.80f, 0.95f);
             return baseCol;
         });
     }
