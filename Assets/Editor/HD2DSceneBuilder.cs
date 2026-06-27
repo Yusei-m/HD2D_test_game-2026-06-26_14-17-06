@@ -145,21 +145,29 @@ public static class HD2DSceneBuilder
         var matRoofSlate = MakeTexturedMat("MatRoofSlate", roofSlate, new Vector2(3f, 1.5f), 0.05f);
         var matRoofBrown = MakeTexturedMat("MatRoofBrown", roofBrown, new Vector2(3f, 1.5f), 0.05f);
 
-        // --- 家 A（左奥）---
-        BuildHouse(root, "TownHouseA", new Vector3(-8f, 0f, 7f),
-            new Vector3(4f, 3f, 4f), matCream, matRoofSlate);
+        // --- 家 A（左奥）：GLB モデル。無ければプリミティブにフォールバック ---
+        if (PlaceBuilding(root, "TownHouseA", "Assets/Models/house1.glb",
+                new Vector3(-8f, 0f, 7f), 0f, 5.0f) == null)
+            BuildHouse(root, "TownHouseA", new Vector3(-8f, 0f, 7f),
+                new Vector3(4f, 3f, 4f), matCream, matRoofSlate);
 
         // --- 家 B（中央奥）---
-        BuildHouse(root, "TownHouseB", new Vector3(-1.5f, 0f, 9f),
-            new Vector3(4f, 3.2f, 4f), matStone, matRoofSlate);
+        if (PlaceBuilding(root, "TownHouseB", "Assets/Models/house2.glb",
+                new Vector3(-1.5f, 0f, 9f), 0f, 5.0f) == null)
+            BuildHouse(root, "TownHouseB", new Vector3(-1.5f, 0f, 9f),
+                new Vector3(4f, 3.2f, 4f), matStone, matRoofSlate);
 
         // --- 店（左手前）---
-        BuildHouse(root, "Store", new Vector3(-8.5f, 0f, 0f),
-            new Vector3(3.6f, 2.6f, 3.6f), matBrick, matRoofBrown);
-        // 店のひさし
-        CreateBox("Store_Awning", root, new Vector3(-8.5f, 2.0f, -1.9f),
-            new Vector3(3.8f, 0.25f, 1.2f),
-            MakeMat("Awning", new Color(0.8f, 0.32f, 0.3f), 0.1f));
+        if (PlaceBuilding(root, "Store", "Assets/Models/shop.glb",
+                new Vector3(-8.5f, 0f, 0f), 0f, 4.6f) == null)
+        {
+            BuildHouse(root, "Store", new Vector3(-8.5f, 0f, 0f),
+                new Vector3(3.6f, 2.6f, 3.6f), matBrick, matRoofBrown);
+            // 店のひさし（フォールバック時のみ）
+            CreateBox("Store_Awning", root, new Vector3(-8.5f, 2.0f, -1.9f),
+                new Vector3(3.8f, 0.25f, 1.2f),
+                MakeMat("Awning", new Color(0.8f, 0.32f, 0.3f), 0.1f));
+        }
 
         // --- 右の大きな建物（教会風・アーチ）---
         BuildHouse(root, "ChapelHouse", new Vector3(8.5f, 0f, -1f),
@@ -196,6 +204,63 @@ public static class HD2DSceneBuilder
         BuildTree(root, new Vector3(13f, 0f, -4f));
         BuildTree(root, new Vector3(4f, 0f, 12f));
         BuildTree(root, new Vector3(-3f, 0f, -10f));
+    }
+
+    /// <summary>
+    /// GLB（glTFast でインポート済み）の建物モデルを配置する。
+    /// 指定した幅(targetWidth)になるよう等倍スケールし、底面を地面に接地させ、
+    /// 通り抜け防止の BoxCollider を付ける。アセットが無ければ null を返す
+    /// （呼び出し側がプリミティブにフォールバックする）。
+    /// </summary>
+    private static GameObject PlaceBuilding(Transform parent, string name,
+        string assetPath, Vector3 groundPos, float yaw, float targetWidth)
+    {
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+        if (prefab == null) return null;
+
+        var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+        if (go == null) return null;
+        go.name = name;
+        go.transform.SetParent(parent);
+        go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        go.transform.position = groundPos;
+
+        // 目標の幅に合わせて等倍スケール
+        if (TryGetWorldBounds(go, out Bounds b) && b.size.x > 0.0001f)
+        {
+            float s = targetWidth / b.size.x;
+            go.transform.localScale = Vector3.one * s;
+        }
+
+        // 底面を地面（groundPos.y）へ接地
+        if (TryGetWorldBounds(go, out b))
+        {
+            float lift = groundPos.y - b.min.y;
+            go.transform.position += new Vector3(0f, lift, 0f);
+        }
+
+        // 通り抜け防止：ワールドAABBに合わせた箱コライダー（モデル本体とは別オブジェクト）
+        if (TryGetWorldBounds(go, out b))
+        {
+            var colGo = new GameObject(name + "_Collider");
+            colGo.transform.SetParent(parent);
+            colGo.transform.position = b.center;
+            var bc = colGo.AddComponent<BoxCollider>();
+            bc.size = b.size;
+        }
+
+        return go;
+    }
+
+    /// <summary>子孫の全 Renderer を内包するワールド空間 AABB を求める。</summary>
+    private static bool TryGetWorldBounds(GameObject go, out Bounds bounds)
+    {
+        var renderers = go.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) { bounds = default; return false; }
+        bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+            bounds.Encapsulate(renderers[i].bounds);
+        return true;
     }
 
     private static void BuildHouse(Transform parent, string name, Vector3 pos,
