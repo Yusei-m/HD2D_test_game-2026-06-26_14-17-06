@@ -445,16 +445,34 @@ public static class HD2DSceneBuilder
         shadowSr.sortingOrder = -1; // 常にキャラの背面へ
 
         // スプライト（子オブジェクト・ビルボード）
-        Sprite sprite = GenerateCharacterSprite();
         var spriteGo = new GameObject("Sprite");
         spriteGo.transform.SetParent(player.transform);
         spriteGo.transform.localPosition = new Vector3(0f, -0.9f, 0f); // 足元を地面へ
-        spriteGo.transform.localScale = Vector3.one * 2.3f;
         var sr = spriteGo.AddComponent<SpriteRenderer>();
-        sr.sprite = sprite;
         // SpriteRenderer の既定スプライトマテリアルを使用する。
         // （スプライトのテクスチャを正しく表示し、不透明物に対し深度テストも行う。
         //  URP/Lit を割り当てると _BaseMap が空でキャラが真っ白になるため使わない。）
+
+        // ユーザー提供のスプライトシートがあれば、自動スライスして
+        // 向き別の歩行アニメーションに使う。無ければ生成キャラにフォールバック。
+        var rows = PlayerSheetSlicer.EnsureSlicedRows(SpriteFolder + "/player_sheet.png");
+        if (rows != null && rows.Count > 0 && rows[0].Length > 0)
+        {
+            Sprite first = rows[0][0];
+            sr.sprite = first;
+            var anim = spriteGo.AddComponent<PlayerSpriteAnimator>();
+            anim.Setup(rows);
+            // キャラの足元から頭まで約 2.0 ユニットになるよう等倍スケール
+            float hUnits = first.bounds.size.y;
+            float scale = (hUnits > 0.001f) ? 2.0f / hUnits : 2.3f;
+            spriteGo.transform.localScale = Vector3.one * scale;
+        }
+        else
+        {
+            sr.sprite = GenerateCharacterSprite();
+            spriteGo.transform.localScale = Vector3.one * 2.3f;
+        }
+
         spriteGo.AddComponent<Billboard>();
 
         return player;

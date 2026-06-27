@@ -16,11 +16,17 @@ public class PixelSpriteImportSettings : AssetPostprocessor
 
         var importer = (TextureImporter)assetImporter;
         importer.textureType = TextureImporterType.Sprite;
-        importer.spriteImportMode = SpriteImportMode.Single;
         importer.filterMode = FilterMode.Point;            // ドット絵をくっきり保つ
         importer.textureCompression = TextureImporterCompression.Uncompressed; // None
         importer.mipmapEnabled = false;
         importer.alphaIsTransparency = true;
-        importer.spritePixelsPerUnit = 32f;
+
+        // スプライトシート（"_sheet"）はコマ分割(Multiple)を尊重し、
+        // PlayerSheetSlicer が設定した分割・PPU を上書きしない。
+        if (!assetPath.Contains("_sheet"))
+        {
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = 32f;
+        }
     }
 }
