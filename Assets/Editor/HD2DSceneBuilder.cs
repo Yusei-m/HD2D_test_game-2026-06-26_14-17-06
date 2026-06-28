@@ -973,9 +973,10 @@ public static class HD2DSceneBuilder
             cam = camGo.AddComponent<Camera>();
         }
 
-        cam.transform.position = new Vector3(0f, 9f, -12f);
-        cam.transform.rotation = Quaternion.Euler(45f, 0f, 0f);
-        cam.fieldOfView = 34f; // 望遠寄りで HD-2D の圧縮感を出す
+        // より俯瞰（見下ろし）寄りの視点。角度を立て、高く引いて全体を見渡す。
+        cam.transform.position = new Vector3(0f, 17f, -11f);
+        cam.transform.rotation = Quaternion.Euler(58f, 0f, 0f);
+        cam.fieldOfView = 36f; // 望遠寄りで HD-2D の圧縮感を出す
         cam.nearClipPlane = 0.3f;
         cam.farClipPlane = 200f;
         cam.clearFlags = CameraClearFlags.SolidColor;
@@ -1013,9 +1014,9 @@ public static class HD2DSceneBuilder
         // ティルトシフト風の強い被写界深度（記事: Aperture 最小・Focal 大）。
         var dof = profile.Add<DepthOfField>(true);
         dof.mode.Override(DepthOfFieldMode.Bokeh);
-        dof.focusDistance.Override(12f);
-        dof.focalLength.Override(145f);
-        dof.aperture.Override(1.4f);       // 最小絞り＝極浅い被写界深度
+        dof.focusDistance.Override(17f);   // 俯瞰視点でのプレイヤーまでの距離に合わせる
+        dof.focalLength.Override(135f);
+        dof.aperture.Override(1.6f);       // ほぼ最小絞り＝極浅い被写界深度
 
         // ホワイトバランス（記事: Temperature やや暖色 / Tint 少し緑）
         var wb = profile.Add<WhiteBalance>(true);

@@ -14,7 +14,7 @@ public static class HD2DAutoBuild
 {
     private const string ScenePath = "Assets/Scenes/HD2D_Town.unity";
     // ビジュアルを刷新したのでバージョンを上げ、既存の生成済みシーンも作り直す。
-    private const string PrefKey = "HD2D_AutoBuilt_v16";
+    private const string PrefKey = "HD2D_AutoBuilt_v17";
 
     static HD2DAutoBuild()
     {
