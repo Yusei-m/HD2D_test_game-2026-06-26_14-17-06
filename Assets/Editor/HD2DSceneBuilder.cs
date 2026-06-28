@@ -119,22 +119,21 @@ public static class HD2DSceneBuilder
         ground.GetComponent<Renderer>().sharedMaterial = grass;
         ground.AddComponent<WalkableSurface>();  // プレイヤーが歩ける面
 
-        // 土の道（薄い箱を地面に重ねる）。少し幅広にして道らしく見せる。
-        var roadMat = MakeTexturedMat("GroundDirt", dirtTex, new Vector2(2.5f, 20f), 0.04f);
-        CreateBox("Road_Main", null, new Vector3(0f, 0.02f, 0f),
-            new Vector3(4.5f, 0.04f, 40f), roadMat, collider: false);
-        var roadMatCross = MakeTexturedMat("GroundDirtCross", dirtTex, new Vector2(13f, 2.5f), 0.04f);
-        CreateBox("Road_Cross", null, new Vector3(0f, 0.02f, 4f),
-            new Vector3(26f, 0.04f, 4.5f), roadMatCross, collider: false);
-        // 店の前へ続く脇道
-        var roadMatSide = MakeTexturedMat("GroundDirtSide", dirtTex, new Vector2(2f, 6f), 0.04f);
-        CreateBox("Road_Side", null, new Vector3(-8.5f, 0.02f, -1.5f),
-            new Vector3(3f, 0.04f, 10f), roadMatSide, collider: false);
+        // 道や石畳は地面に薄く重ねる「デカール」。重なる面を同じ高さに置くと
+        // Zファイティング（描画の取り合い＝高速チラつき）が起きるため、
+        // 各デカールの高さ(Y)を少しずつずらして必ず別の平面にする。
+        // 中央の南北メイン道路。川(z13〜19)の手前で止め、川の下に道が透けないようにする。
+        var roadMat = MakeTexturedMat("GroundDirt", dirtTex, new Vector2(2.5f, 18f), 0.04f);
+        CreateBox("Road_Main", null, new Vector3(0f, 0.03f, -4.5f),
+            new Vector3(5f, 0.04f, 35f), roadMat, collider: false);
 
-        // 石畳（右の建物前）
-        var stoneMat = MakeTexturedMat("GroundStone", stoneTex, new Vector2(3.5f, 4f), 0.12f);
-        CreateBox("StonePath", null, new Vector3(8f, 0.03f, -2f),
-            new Vector3(7f, 0.04f, 8f), stoneMat, collider: false);
+        // 右手前の建物前の石畳プラザ（少し高い面に）
+        var stoneMat = MakeTexturedMat("GroundStone", stoneTex, new Vector2(3f, 3f), 0.12f);
+        CreateBox("StonePlaza", null, new Vector3(9f, 0.06f, -3f),
+            new Vector3(5f, 0.04f, 5f), stoneMat, collider: false);
+        // 左手前の建物前の石畳プラザ
+        CreateBox("StonePlazaL", null, new Vector3(-9f, 0.05f, -1f),
+            new Vector3(5f, 0.04f, 5f), stoneMat, collider: false);
     }
 
     private static Texture2D LoadTex(string path) =>
@@ -162,27 +161,28 @@ public static class HD2DSceneBuilder
 
         // --- 街並みは渡された GLB モデルの建物のみで構成（正面がカメラ側を向くよう yaw 180）。
         //     モデルが無いときだけプリミティブにフォールバック。 ---
-        // 左側（道の西）— 間隔を広めに取る
+        // 道(x=0)の両側に等間隔で並べる（川より南＝手前）。中心から ±9、奥行き 7 ずつ。
+        // 左側（道の西）
         PlaceTownBuilding(root, "House_L1", "Assets/Models/shop.glb",
-            new Vector3(-12f, 0f, -1f), 4.8f, matBrick, matRoofBrown);
+            new Vector3(-9f, 0f, -4f), 5.0f, matBrick, matRoofBrown);
         PlaceTownBuilding(root, "House_L2", "Assets/Models/house1.glb",
-            new Vector3(-12f, 0f, 9f), 5.0f, matCream, matRoofSlate);
+            new Vector3(-9f, 0f, 3f), 5.0f, matCream, matRoofSlate);
         PlaceTownBuilding(root, "House_L3", "Assets/Models/house2.glb",
-            new Vector3(-12f, 0f, 19f), 5.0f, matStone, matRoofSlate);
+            new Vector3(-9f, 0f, 10f), 5.0f, matStone, matRoofSlate);
         // 右側（道の東）
         PlaceTownBuilding(root, "House_R1", "Assets/Models/house2.glb",
-            new Vector3(12f, 0f, -3f), 5.0f, matStone, matRoofSlate);
+            new Vector3(9f, 0f, -4f), 5.0f, matStone, matRoofSlate);
         PlaceTownBuilding(root, "House_R2", "Assets/Models/house1.glb",
-            new Vector3(12f, 0f, 7f), 5.0f, matCream, matRoofSlate);
+            new Vector3(9f, 0f, 3f), 5.0f, matCream, matRoofSlate);
         PlaceTownBuilding(root, "House_R3", "Assets/Models/shop.glb",
-            new Vector3(12f, 0f, 17f), 4.8f, matBrick, matRoofBrown);
+            new Vector3(9f, 0f, 10f), 5.0f, matBrick, matRoofBrown);
 
         // ユーザー提供の花スプライト（背景透過済み）。無ければ発光キューブで代替。
         Sprite blueFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_blue.png");
         Sprite whiteFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_white.png");
 
-        // --- 中央の花壇（フェンス囲い）---
-        BuildFlowerPlot(root, new Vector3(-5.5f, 0f, -3.5f), blueFlower, whiteFlower);
+        // --- 花壇（フェンス囲い）。建物の手前の開けた場所に置く ---
+        BuildFlowerPlot(root, new Vector3(-5f, 0f, -9f), blueFlower, whiteFlower);
 
         // --- 散らばった花 ---
         if (blueFlower != null || whiteFlower != null)
@@ -200,30 +200,37 @@ public static class HD2DSceneBuilder
                 new Vector3(1.6f, 0.12f, 1.6f), blueMat, collider: false);
         }
 
-        // --- 木 ---
-        BuildTree(root, new Vector3(-12f, 0f, 2f));
-        BuildTree(root, new Vector3(13f, 0f, -4f));
-        BuildTree(root, new Vector3(4f, 0f, 12f));
-        BuildTree(root, new Vector3(-3f, 0f, -10f));
+        // --- 木（建物や道に重ならない外周に配置）---
+        BuildTree(root, new Vector3(-15f, 0f, 3f));
+        BuildTree(root, new Vector3(15f, 0f, 1f));
+        BuildTree(root, new Vector3(-15f, 0f, 14f));
+        BuildTree(root, new Vector3(15f, 0f, 11f));
+        BuildTree(root, new Vector3(-6f, 0f, -11f));
+        BuildTree(root, new Vector3(6f, 0f, -12f));
 
-        // --- 暖かい窓明かり（建物の正面に点光源）---
-        AddWindowGlow(root, new Vector3(-8f, 2.2f, 5.2f));
-        AddWindowGlow(root, new Vector3(-1.5f, 2.4f, 7.2f));
-        AddWindowGlow(root, new Vector3(-8.5f, 1.8f, -1.8f));
-        AddWindowGlow(root, new Vector3(8.5f, 2.6f, -3.2f), 3.0f);
+        // --- 暖かい窓明かり（各建物の正面＝-Z 側に点光源）---
+        AddWindowGlow(root, new Vector3(-9f, 2.4f, -6.6f));
+        AddWindowGlow(root, new Vector3(-9f, 2.4f, 0.4f));
+        AddWindowGlow(root, new Vector3(-9f, 2.4f, 7.4f));
+        AddWindowGlow(root, new Vector3(9f, 2.4f, -6.6f));
+        AddWindowGlow(root, new Vector3(9f, 2.4f, 0.4f));
+        AddWindowGlow(root, new Vector3(9f, 2.4f, 7.4f));
 
-        // --- 道沿いの石灯籠 ---
-        BuildLantern(root, new Vector3(-3.0f, 0f, -1f));
-        BuildLantern(root, new Vector3(3.0f, 0f, 2f));
-        BuildLantern(root, new Vector3(-3.0f, 0f, 7f));
-        BuildLantern(root, new Vector3(3.0f, 0f, -5f));
+        // --- 道沿いの石灯籠（道の両脇 x=±2.8 に等間隔）---
+        BuildLantern(root, new Vector3(-2.8f, 0f, -2f));
+        BuildLantern(root, new Vector3(2.8f, 0f, -2f));
+        BuildLantern(root, new Vector3(-2.8f, 0f, 6f));
+        BuildLantern(root, new Vector3(2.8f, 0f, 6f));
+        BuildLantern(root, new Vector3(-2.8f, 0f, 13f));
+        BuildLantern(root, new Vector3(2.8f, 0f, 13f));
 
-        // --- 野花を追加（道脇に多めに）---
+        // --- 野花（道と建物の間の芝の縁に）---
         if (blueFlower != null || whiteFlower != null)
         {
-            ScatterFlowers(root, new Vector3(-6f, 0f, 1.5f), 2.6f, 6, blueFlower, whiteFlower, 0.5f);
-            ScatterFlowers(root, new Vector3(6.5f, 0f, 4.5f), 2.6f, 6, blueFlower, whiteFlower, 0.5f);
-            ScatterFlowers(root, new Vector3(-9f, 0f, -4f), 2.2f, 5, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(-4.6f, 0f, -1f), 1.3f, 4, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(4.6f, 0f, -1f), 1.3f, 4, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(-4.6f, 0f, 6f), 1.3f, 4, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(4.6f, 0f, 6f), 1.3f, 4, blueFlower, whiteFlower, 0.5f);
         }
 
         // --- 秋の落ち葉（地面に散乱）---
@@ -791,31 +798,46 @@ public static class HD2DSceneBuilder
         var wall = MakeTexturedMat("WallCream",
             PlasterTexture("PlasterCream", new Color(0.90f, 0.86f, 0.74f)), new Vector2(2f, 2f), 0.04f);
 
-        // 川（橋の下）。青い水面のストリップ。
-        var water = MakeMat("Water", new Color(0.18f, 0.36f, 0.5f), 0.85f);
-        CreateBox("River", root, new Vector3(0f, 0.06f, 13f),
-            new Vector3(60f, 0.1f, 5.5f), water, collider: false);
+        // 川（橋の下）。透明で反射する水面。建物より奥(z=16)に通す。
+        var water = MakeWaterMaterial();
+        CreateBox("River", root, new Vector3(0f, 0.08f, 16f),
+            new Vector3(70f, 0.08f, 6f), water, collider: false);
+        // 川底（暗い土）。水越しに見える。
+        CreateBox("RiverBed", root, new Vector3(0f, 0.0f, 16f),
+            new Vector3(70f, 0.04f, 6f),
+            MakeMat("RiverBed", new Color(0.16f, 0.20f, 0.22f), 0.1f), collider: false);
+        // 水面の反射を拾うリフレクションプローブ（再生開始時に周囲を1回キャプチャ）
+        var rpGo = new GameObject("WaterReflection");
+        rpGo.transform.SetParent(root);
+        rpGo.transform.position = new Vector3(0f, 2.5f, 16f);
+        var rp = rpGo.AddComponent<ReflectionProbe>();
+        rp.mode = UnityEngine.Rendering.ReflectionProbeMode.Realtime;
+        rp.refreshMode = UnityEngine.Rendering.ReflectionProbeRefreshMode.OnAwake;
+        rp.boxProjection = true;
+        rp.size = new Vector3(80f, 18f, 44f);
+        rp.resolution = 128;
+        rp.cullingMask = ~0;
 
         // 赤い橋（川を渡る）。デッキは見た目のみ、歩行面はスロープで用意。
-        CreateBox("BridgeDeck", root, new Vector3(0f, 0.28f, 13f), new Vector3(4.6f, 0.18f, 3.4f),
+        CreateBox("BridgeDeck", root, new Vector3(0f, 0.28f, 16f), new Vector3(4.6f, 0.18f, 3.4f),
             MakeMat("BridgeWood", new Color(0.5f, 0.34f, 0.22f), 0.1f), collider: false);
-        CreateBox("BridgeRailL", root, new Vector3(-2.4f, 0.78f, 13f),
+        CreateBox("BridgeRailL", root, new Vector3(-2.4f, 0.78f, 16f),
             new Vector3(0.16f, 0.7f, 3.4f), red);
-        CreateBox("BridgeRailR", root, new Vector3(2.4f, 0.78f, 13f),
+        CreateBox("BridgeRailR", root, new Vector3(2.4f, 0.78f, 16f),
             new Vector3(0.16f, 0.7f, 3.4f), red);
         // 橋の歩行面：手前スロープ → デッキ平面 → 奥スロープ
-        AddWalkRamp(root, "BridgeRampS", new Vector3(0f, 0f, 10.0f), new Vector3(0f, 0.28f, 11.3f), 4.2f);
-        AddWalkRamp(root, "BridgeWalk", new Vector3(0f, 0.28f, 11.3f), new Vector3(0f, 0.28f, 14.7f), 4.2f);
-        AddWalkRamp(root, "BridgeRampN", new Vector3(0f, 0.28f, 14.7f), new Vector3(0f, 0f, 16.0f), 4.2f);
+        AddWalkRamp(root, "BridgeRampS", new Vector3(0f, 0f, 13.0f), new Vector3(0f, 0.28f, 14.3f), 4.2f);
+        AddWalkRamp(root, "BridgeWalk", new Vector3(0f, 0.28f, 14.3f), new Vector3(0f, 0.28f, 17.7f), 4.2f);
+        AddWalkRamp(root, "BridgeRampN", new Vector3(0f, 0.28f, 17.7f), new Vector3(0f, 0f, 19.0f), 4.2f);
 
         // 石段（中央奥へ上る）— 見た目のみ。歩行はスロープに任せる。
         for (int i = 0; i < 10; i++)
-            CreateBox("Stair" + i, root, new Vector3(0f, 0.15f + i * 0.28f, 17f + i * 0.95f),
+            CreateBox("Stair" + i, root, new Vector3(0f, 0.15f + i * 0.28f, 20f + i * 0.95f),
                 new Vector3(6f, 0.3f, 1.1f), stairMat, collider: false);
-        AddWalkRamp(root, "StairRamp", new Vector3(0f, 0f, 16.6f), new Vector3(0f, 2.85f, 26.8f), 6f);
+        AddWalkRamp(root, "StairRamp", new Vector3(0f, 0f, 19.6f), new Vector3(0f, 2.85f, 29.8f), 6f);
 
         // 石段の上、霧の奥に建物（GLB モデル）。土台だけ石で作り、その上に建物を載せる。
-        Vector3 b = new Vector3(2.5f, 0f, 31f);
+        Vector3 b = new Vector3(2.5f, 0f, 34f);
         CreateBox("PC_Base", root, b + new Vector3(0f, 2.6f, 0f), new Vector3(9f, 5.2f, 8f), stairMat);
         if (PlaceBuilding(root, "PC_Building", "Assets/Models/house2.glb",
                 b + new Vector3(0f, 5.2f, 0f), 180f, 8f) == null)
@@ -826,7 +848,7 @@ public static class HD2DSceneBuilder
         AddWindowGlow(root, b + new Vector3(0f, 6.5f, -3.5f), 3.0f);
 
         // ポケボール看板（柱＋白板＋赤い半円）
-        Vector3 sp = new Vector3(6.5f, 0f, 22f);
+        Vector3 sp = new Vector3(6.5f, 0f, 25f);
         CreateBox("Sign_Post", root, sp + new Vector3(0f, 1.2f, 0f), new Vector3(0.18f, 2.4f, 0.18f),
             MakeMat("SignPost", new Color(0.4f, 0.28f, 0.18f), 0.1f));
         CreateBox("Sign_BoardW", root, sp + new Vector3(0f, 2.6f, 0f), new Vector3(1.4f, 0.7f, 0.12f),
@@ -1078,6 +1100,33 @@ public static class HD2DSceneBuilder
             mat.SetColor("_EmissionColor", emission.Value);
         }
 
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
+    /// <summary>透明＆高反射の水マテリアル（URP/Lit を Transparent 設定に）。</summary>
+    private static Material MakeWaterMaterial()
+    {
+        string path = MatFolder + "/Water.mat";
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.SetColor("_BaseColor", new Color(0.13f, 0.32f, 0.42f, 0.70f));
+        mat.SetFloat("_Smoothness", 0.95f);   // つるつるで強く反射
+        mat.SetFloat("_Metallic", 0.4f);
+        mat.SetColor("_SpecColor", Color.white);
+        // 透明サーフェス設定
+        mat.SetFloat("_Surface", 1f);
+        mat.SetFloat("_Blend", 0f);
+        mat.SetOverrideTag("RenderType", "Transparent");
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        mat.DisableKeyword("_ALPHATEST_ON");
+        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
         AssetDatabase.CreateAsset(mat, path);
         return mat;
     }
