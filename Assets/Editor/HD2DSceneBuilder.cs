@@ -55,6 +55,9 @@ public static class HD2DSceneBuilder
         // ---- 6. ポストプロセス（URP Global Volume）----
         BuildGlobalVolume();
 
+        // ---- 6.5 空気感（舞う光粒・降り注ぐ光）----
+        BuildAtmosphere(Camera.main);
+
         // ---- 7. 保存 ----
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
@@ -83,7 +86,7 @@ public static class HD2DSceneBuilder
         RenderSettings.ambientSkyColor = new Color(0.55f, 0.60f, 0.70f);
         RenderSettings.ambientEquatorColor = new Color(0.40f, 0.42f, 0.46f);
         RenderSettings.ambientGroundColor = new Color(0.16f, 0.16f, 0.20f);
-        RenderSettings.ambientIntensity = 0.85f;
+        RenderSettings.ambientIntensity = 0.7f;
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
@@ -442,6 +445,139 @@ public static class HD2DSceneBuilder
         }
     }
 
+    // ===================================================================
+    //  空気感（舞う光粒・降り注ぐ光）
+    // ===================================================================
+    private static void BuildAtmosphere(Camera cam)
+    {
+        if (cam == null) return;
+
+        Texture2D mote = MakeMoteTexture();
+        Material moteMat = MakeAdditiveMaterial("MoteMat", mote,
+            new Color(1f, 0.95f, 0.78f, 1f));
+
+        // --- 舞う光粒（記事 2.5）。カメラ前方に矩形で漂わせる ---
+        var motesGo = new GameObject("LightMotes");
+        motesGo.transform.SetParent(cam.transform, false);
+        motesGo.transform.localPosition = new Vector3(0f, 0f, 16f); // カメラ前方
+        motesGo.transform.localRotation = Quaternion.identity;
+        var ps = motesGo.AddComponent<ParticleSystem>();
+        ps.Stop();
+
+        var main = ps.main;
+        main.loop = true;
+        main.duration = 10f;
+        main.startLifetime = 9f;
+        main.startSpeed = 0f;                  // 自分からは動かず、漂わせる
+        main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.12f);
+        main.startColor = new Color(1f, 0.94f, 0.78f, 0.5f);
+        main.maxParticles = 400;
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.gravityModifier = 0f;
+        main.playOnAwake = true;
+
+        var emission = ps.emission;
+        emission.rateOverTime = 22f;
+
+        var shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(34f, 22f, 1f);
+
+        var vel = ps.velocityOverLifetime;     // ふわふわ漂う
+        vel.enabled = true;
+        vel.space = ParticleSystemSimulationSpace.Local;
+        vel.x = new ParticleSystem.MinMaxCurve(-0.07f, 0.07f);
+        vel.y = new ParticleSystem.MinMaxCurve(-0.05f, 0.03f);
+        vel.z = new ParticleSystem.MinMaxCurve(0f);
+
+        var col = ps.colorOverLifetime;        // フェードイン・アウト
+        col.enabled = true;
+        var grad = new Gradient();
+        grad.SetKeys(
+            new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+            new[]
+            {
+                new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.5f),
+                new GradientAlphaKey(0f, 1f)
+            });
+        col.color = new ParticleSystem.MinMaxGradient(grad);
+
+        var psr = ps.GetComponent<ParticleSystemRenderer>();
+        psr.material = moteMat;
+        psr.renderMode = ParticleSystemRenderMode.Billboard;
+        psr.sortingOrder = 20;
+        ps.Play();
+
+        // --- 降り注ぐ光（簡易ゴッドレイ）。陽光方向に向けた半透明の加算スプライト ---
+        var lightDir = Object.FindFirstObjectByType<Light>();
+        var shaftMat = MakeAdditiveMaterial("ShaftMat", mote,
+            new Color(1f, 0.92f, 0.7f, 0.12f));
+        var shaftGo = new GameObject("LightShaft");
+        shaftGo.transform.SetParent(cam.transform, false);
+        shaftGo.transform.localPosition = new Vector3(-3f, 4f, 18f);
+        shaftGo.transform.localRotation = Quaternion.Euler(0f, 0f, 28f);
+        shaftGo.transform.localScale = new Vector3(7f, 20f, 1f);
+        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "ShaftQuad";
+        Object.DestroyImmediate(quad.GetComponent<Collider>());
+        quad.transform.SetParent(shaftGo.transform, false);
+        quad.GetComponent<Renderer>().sharedMaterial = shaftMat;
+    }
+
+    private static Texture2D MakeMoteTexture()
+    {
+        EnsureFolder("Assets/FX");
+        string path = "Assets/FX/mote.png";
+        var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (existing != null) return existing;
+
+        const int S = 64;
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        float c = (S - 1) * 0.5f;
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float dx = (x - c) / c, dy = (y - c) / c;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.Clamp01(1f - d);
+                a = a * a * a;                  // 中心が明るく外周はふんわり消える
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        tex.Apply();
+        File.WriteAllBytes(Path.Combine(Directory.GetCurrentDirectory(), path), tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+        var ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.textureType = TextureImporterType.Default;
+        ti.wrapMode = TextureWrapMode.Clamp;
+        ti.filterMode = FilterMode.Bilinear;    // 粒は柔らかく
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.mipmapEnabled = false;
+        ti.alphaIsTransparency = true;
+        ti.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    private static Material MakeAdditiveMaterial(string key, Texture2D tex, Color color)
+    {
+        string path = MatFolder + "/" + key + ".mat";
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) { existing.SetTexture("_BaseMap", tex); existing.SetColor("_BaseColor", color); return existing; }
+
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+        mat.SetTexture("_BaseMap", tex);
+        mat.SetColor("_BaseColor", color);
+        mat.SetFloat("_Surface", 1f);           // Transparent
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.One); // 加算
+        mat.SetInt("_ZWrite", 0);
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
     private static void BuildTree(Transform parent, Vector3 pos)
     {
         var root = new GameObject("Tree").transform;
@@ -585,44 +721,51 @@ public static class HD2DSceneBuilder
         var tone = profile.Add<Tonemapping>(true);
         tone.mode.Override(TonemappingMode.ACES);
 
-        // 光の溢れ（ハイライトがにじむ宝石のような輝き）
+        // 光の溢れ（記事: Intensity 2.5 / Threshold 0.6 相当。明るい所が広くにじむ）
         var bloom = profile.Add<Bloom>(true);
-        bloom.intensity.Override(2.2f);
-        bloom.threshold.Override(0.95f);   // 明るい所だけ強く発光
-        bloom.scatter.Override(0.72f);
-        bloom.tint.Override(new Color(1f, 0.95f, 0.85f)); // 暖色の光
+        bloom.intensity.Override(2.0f);
+        bloom.threshold.Override(0.7f);
+        bloom.scatter.Override(0.78f);
+        bloom.tint.Override(new Color(1f, 0.95f, 0.85f));
 
-        // ティルトシフト風の強い被写界深度（ジオラマ感）。
-        // 手前も奥も大きくボケ、中央のプレイヤー帯だけシャープに。
+        // ティルトシフト風の強い被写界深度（記事: Aperture 最小・Focal 大）。
         var dof = profile.Add<DepthOfField>(true);
         dof.mode.Override(DepthOfFieldMode.Bokeh);
         dof.focusDistance.Override(12f);
-        dof.focalLength.Override(135f);
-        dof.aperture.Override(1.8f);       // 絞り開放＝極浅い被写界深度
+        dof.focalLength.Override(145f);
+        dof.aperture.Override(1.4f);       // 最小絞り＝極浅い被写界深度
 
-        // 暖色のホワイトバランス（夕方の光）
+        // ホワイトバランス（記事: Temperature やや暖色 / Tint 少し緑）
         var wb = profile.Add<WhiteBalance>(true);
-        wb.temperature.Override(12f);
-        wb.tint.Override(2f);
+        wb.temperature.Override(5f);
+        wb.tint.Override(-6f);
 
-        // 高コントラスト・高彩度（オクトパス特有の濃い色）
+        // 色調整（記事: Hue -13 / Saturation +23。明るさは上げず階調で作る）
         var ca = profile.Add<ColorAdjustments>(true);
-        ca.postExposure.Override(0.05f);
-        ca.contrast.Override(26f);
+        ca.postExposure.Override(0f);
+        ca.contrast.Override(16f);
+        ca.hueShift.Override(-6f);
         ca.saturation.Override(22f);
-        ca.colorFilter.Override(new Color(1.0f, 0.96f, 0.88f));
+        ca.colorFilter.Override(new Color(1.0f, 0.97f, 0.92f));
 
-        // スプリットトーン：影を寒色、ハイライトを暖色に振り、立体感と空気感を出す
+        // Lift / Gamma / Gain（記事の肝）：影を持ち上げ・中間を暗く・ハイライトを少し抑える。
+        // これで「ただ明るい」ではなく、締まったフィルム調の階調になる。
+        var lgg = profile.Add<LiftGammaGain>(true);
+        lgg.lift.Override(new Vector4(1f, 1f, 1.05f, 0.06f));   // 影を少し持ち上げ＋寒色
+        lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.14f));    // 中間を暗く
+        lgg.gain.Override(new Vector4(1f, 0.99f, 0.96f, -0.05f)); // ハイライトを少し抑え＋暖色
+
+        // スプリットトーン：影を寒色、ハイライトを暖色に
         var split = profile.Add<SplitToning>(true);
-        split.shadows.Override(new Color(0.20f, 0.42f, 0.55f));    // 影は青緑
-        split.highlights.Override(new Color(1.0f, 0.72f, 0.42f));  // 光は橙
-        split.balance.Override(-12f);
+        split.shadows.Override(new Color(0.20f, 0.42f, 0.55f));
+        split.highlights.Override(new Color(1.0f, 0.72f, 0.42f));
+        split.balance.Override(-10f);
 
-        // 強めのビネットで中央へ視線を集め、画面を引き締める
+        // ビネット（記事: Intensity 0.536 / Smoothness 1 / 黒 / 丸）
         var vig = profile.Add<Vignette>(true);
-        vig.color.Override(new Color(0.05f, 0.05f, 0.08f));
-        vig.intensity.Override(0.42f);
-        vig.smoothness.Override(0.5f);
+        vig.color.Override(Color.black);
+        vig.intensity.Override(0.5f);
+        vig.smoothness.Override(1.0f);
         vig.rounded.Override(true);
 
         EditorUtility.SetDirty(profile);
