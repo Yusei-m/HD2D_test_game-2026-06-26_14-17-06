@@ -138,11 +138,15 @@ public class PlayerSpriteAnimator : MonoBehaviour
             return list.ToArray();
         }
 
-        // このシートのコマ割りに合わせた、向きの揃ったコマ選定
-        downFrames = Pick((0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5)); // 前向き歩行
-        upFrames = Pick((3, 3), (3, 4), (3, 5));                           // 後ろ向き歩行
-        rightFrames = Pick((1, 6), (2, 5));                                // 右向き歩行
-        leftFrames = rightFrames;                                          // 反転して左向きに
+        // このシートのコマ割りに合わせ、足が交互に前後する歩行サイクルを選定。
+        // 前向き：上段の歩行コマ。
+        downFrames = Pick((0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5));
+        // 後ろ向き：左足前(2,3)→直立(1,0)→右足前(2,6)→直立(1,0) で交互に。
+        upFrames = Pick((2, 3), (1, 0), (2, 6), (1, 0));
+        // 右向き：左右の足が明確に入れ替わる下段の歩行コマ。4,4 を中割りに挟む。
+        rightFrames = Pick((4, 1), (4, 4), (4, 3), (4, 4));
+        // 左向き：右向きコマを左右反転して使う。
+        leftFrames = rightFrames;
 
         flipDown = false;
         flipUp = false;
