@@ -117,6 +117,7 @@ public static class HD2DSceneBuilder
         ground.transform.position = Vector3.zero;
         ground.transform.localScale = new Vector3(6f, 1f, 6f); // 60 x 60
         ground.GetComponent<Renderer>().sharedMaterial = grass;
+        ground.AddComponent<WalkableSurface>();  // プレイヤーが歩ける面
 
         // 土の道（薄い箱を地面に重ねる）。少し幅広にして道らしく見せる。
         var roadMat = MakeTexturedMat("GroundDirt", dirtTex, new Vector2(2.5f, 20f), 0.04f);
@@ -161,20 +162,20 @@ public static class HD2DSceneBuilder
 
         // --- 街並みは渡された GLB モデルの建物のみで構成（正面がカメラ側を向くよう yaw 180）。
         //     モデルが無いときだけプリミティブにフォールバック。 ---
-        // 左側（道の西）
+        // 左側（道の西）— 間隔を広めに取る
         PlaceTownBuilding(root, "House_L1", "Assets/Models/shop.glb",
-            new Vector3(-8.5f, 0f, 0f), 4.8f, matBrick, matRoofBrown);
+            new Vector3(-12f, 0f, -1f), 4.8f, matBrick, matRoofBrown);
         PlaceTownBuilding(root, "House_L2", "Assets/Models/house1.glb",
-            new Vector3(-9f, 0f, 6.5f), 5.0f, matCream, matRoofSlate);
+            new Vector3(-12f, 0f, 9f), 5.0f, matCream, matRoofSlate);
         PlaceTownBuilding(root, "House_L3", "Assets/Models/house2.glb",
-            new Vector3(-9f, 0f, 13f), 5.0f, matStone, matRoofSlate);
+            new Vector3(-12f, 0f, 19f), 5.0f, matStone, matRoofSlate);
         // 右側（道の東）
         PlaceTownBuilding(root, "House_R1", "Assets/Models/house2.glb",
-            new Vector3(8.5f, 0f, -1f), 5.0f, matStone, matRoofSlate);
+            new Vector3(12f, 0f, -3f), 5.0f, matStone, matRoofSlate);
         PlaceTownBuilding(root, "House_R2", "Assets/Models/house1.glb",
-            new Vector3(9f, 0f, 5.5f), 5.0f, matCream, matRoofSlate);
+            new Vector3(12f, 0f, 7f), 5.0f, matCream, matRoofSlate);
         PlaceTownBuilding(root, "House_R3", "Assets/Models/shop.glb",
-            new Vector3(9f, 0f, 12f), 4.8f, matBrick, matRoofBrown);
+            new Vector3(12f, 0f, 17f), 4.8f, matBrick, matRoofBrown);
 
         // ユーザー提供の花スプライト（背景透過済み）。無ければ発光キューブで代替。
         Sprite blueFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_blue.png");
@@ -755,6 +756,28 @@ public static class HD2DSceneBuilder
         }
     }
 
+    /// <summary>
+    /// a→b を結ぶ「見えない傾斜面」を作る（当たり判定＋WalkableSurface のみ）。
+    /// 階段や橋の見た目はそのままに、その上を滑らかに登り降りできる歩行面を与える。
+    /// </summary>
+    private static void AddWalkRamp(Transform parent, string name, Vector3 a, Vector3 b,
+        float width, float thick = 0.3f)
+    {
+        Vector3 dir = b - a;
+        float len = dir.magnitude;
+        if (len < 0.001f) return;
+        var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = name;
+        go.transform.SetParent(parent);
+        Quaternion rot = Quaternion.LookRotation(dir / len, Vector3.up);
+        go.transform.rotation = rot;
+        go.transform.localScale = new Vector3(width, thick, len);
+        go.transform.position = (a + b) * 0.5f - (rot * Vector3.up) * (thick * 0.5f);
+        var mr = go.GetComponent<MeshRenderer>();
+        if (mr != null) mr.enabled = false;   // 当たり判定のみ（見た目は階段/橋に任せる）
+        go.AddComponent<WalkableSurface>();
+    }
+
     // 背景のランドマーク：赤い橋・石段・多層の赤屋根の建物・ポケボール看板。
     private static void BuildBackgroundLandmark(Transform parent)
     {
@@ -768,19 +791,31 @@ public static class HD2DSceneBuilder
         var wall = MakeTexturedMat("WallCream",
             PlasterTexture("PlasterCream", new Color(0.90f, 0.86f, 0.74f)), new Vector2(2f, 2f), 0.04f);
 
-        // 石段（中央奥へ上る）
-        for (int i = 0; i < 10; i++)
-            CreateBox("Stair" + i, root, new Vector3(0f, 0.15f + i * 0.28f, 15f + i * 0.95f),
-                new Vector3(6f, 0.3f, 1.1f), stairMat);
+        // 川（橋の下）。青い水面のストリップ。
+        var water = MakeMat("Water", new Color(0.18f, 0.36f, 0.5f), 0.85f);
+        CreateBox("River", root, new Vector3(0f, 0.06f, 13f),
+            new Vector3(60f, 0.1f, 5.5f), water, collider: false);
 
-        // 赤い橋（石段の手前）
-        CreateBox("BridgeDeck", root, new Vector3(0f, 0.25f, 13f), new Vector3(4.5f, 0.2f, 2.4f),
-            MakeMat("BridgeWood", new Color(0.5f, 0.34f, 0.22f), 0.1f));
-        CreateBox("BridgeRailL", root, new Vector3(0f, 0.7f, 12.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
-        CreateBox("BridgeRailR", root, new Vector3(0f, 0.7f, 14.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
+        // 赤い橋（川を渡る）。デッキは見た目のみ、歩行面はスロープで用意。
+        CreateBox("BridgeDeck", root, new Vector3(0f, 0.28f, 13f), new Vector3(4.6f, 0.18f, 3.4f),
+            MakeMat("BridgeWood", new Color(0.5f, 0.34f, 0.22f), 0.1f), collider: false);
+        CreateBox("BridgeRailL", root, new Vector3(-2.4f, 0.78f, 13f),
+            new Vector3(0.16f, 0.7f, 3.4f), red);
+        CreateBox("BridgeRailR", root, new Vector3(2.4f, 0.78f, 13f),
+            new Vector3(0.16f, 0.7f, 3.4f), red);
+        // 橋の歩行面：手前スロープ → デッキ平面 → 奥スロープ
+        AddWalkRamp(root, "BridgeRampS", new Vector3(0f, 0f, 10.0f), new Vector3(0f, 0.28f, 11.3f), 4.2f);
+        AddWalkRamp(root, "BridgeWalk", new Vector3(0f, 0.28f, 11.3f), new Vector3(0f, 0.28f, 14.7f), 4.2f);
+        AddWalkRamp(root, "BridgeRampN", new Vector3(0f, 0.28f, 14.7f), new Vector3(0f, 0f, 16.0f), 4.2f);
+
+        // 石段（中央奥へ上る）— 見た目のみ。歩行はスロープに任せる。
+        for (int i = 0; i < 10; i++)
+            CreateBox("Stair" + i, root, new Vector3(0f, 0.15f + i * 0.28f, 17f + i * 0.95f),
+                new Vector3(6f, 0.3f, 1.1f), stairMat, collider: false);
+        AddWalkRamp(root, "StairRamp", new Vector3(0f, 0f, 16.6f), new Vector3(0f, 2.85f, 26.8f), 6f);
 
         // 石段の上、霧の奥に建物（GLB モデル）。土台だけ石で作り、その上に建物を載せる。
-        Vector3 b = new Vector3(2.5f, 0f, 27f);
+        Vector3 b = new Vector3(2.5f, 0f, 31f);
         CreateBox("PC_Base", root, b + new Vector3(0f, 2.6f, 0f), new Vector3(9f, 5.2f, 8f), stairMat);
         if (PlaceBuilding(root, "PC_Building", "Assets/Models/house2.glb",
                 b + new Vector3(0f, 5.2f, 0f), 180f, 8f) == null)

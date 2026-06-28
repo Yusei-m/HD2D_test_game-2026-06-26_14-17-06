@@ -4,9 +4,9 @@ using UnityEngine.InputSystem;
 /// <summary>
 /// HD-2D ウォーキングゲーム用のプレイヤー移動コントローラ。
 /// 矢印キー / WASD 入力で 3D 空間の X-Z 平面を滑らかに移動する。
-/// このプロジェクトは新 Input System を使用しているため、
-/// Keyboard.current から直接キー状態を読む（プロジェクト設定に依存しない）。
-/// 回転は全軸固定し、向きは Billboard が管理する。
+/// さらに、足元の「歩ける面」(WalkableSurface) の高さに追従して Y を合わせるので、
+/// 階段スロープや橋を登り降りできる。建物などには WalkableSurface を付けないため、
+/// 壁として水平移動を止める。
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerController : MonoBehaviour
@@ -17,15 +17,21 @@ public class PlayerController : MonoBehaviour
     [Tooltip("加減速の滑らかさ。大きいほど機敏に追従する。")]
     public float acceleration = 20f;
 
+    [Tooltip("足元（原点）が地面から浮く高さ。スプライトの足元が地面に来る値。")]
+    public float groundOffset = 0.9f;
+
+    [Tooltip("段差を登り降りする速さ。")]
+    public float climbSpeed = 7f;
+
     private Rigidbody _rb;
     private Vector3 _currentVelocity;
+    private readonly RaycastHit[] _hits = new RaycastHit[16];
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
-        // 物理演算による回転を全軸固定。歩行ゲームでは転倒・落下させない。
-        _rb.constraints = RigidbodyConstraints.FreezeRotation |
-                          RigidbodyConstraints.FreezePositionY;
+        // 回転は全軸固定。Y位置は地面追従で自分で制御するので固定しない。
+        _rb.constraints = RigidbodyConstraints.FreezeRotation;
         _rb.useGravity = false;
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
         _rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
@@ -38,12 +44,40 @@ public class PlayerController : MonoBehaviour
         if (dir.sqrMagnitude > 1f) dir.Normalize();
 
         Vector3 targetVelocity = dir * moveSpeed;
-
-        // 目標速度へ滑らかに補間（遅延の無い、しかし急発進しすぎない歩行感）
         _currentVelocity = Vector3.MoveTowards(
             _currentVelocity, targetVelocity, acceleration * Time.fixedDeltaTime);
 
-        _rb.MovePosition(_rb.position + _currentVelocity * Time.fixedDeltaTime);
+        Vector3 next = _rb.position + _currentVelocity * Time.fixedDeltaTime;
+
+        // 移動先の真上から下へレイを飛ばし、歩ける面の高さに Y を合わせる
+        float y = next.y;
+        if (TryGetGroundHeight(next.x, next.z, next.y, out float groundY))
+        {
+            float targetY = groundY + groundOffset;
+            y = Mathf.MoveTowards(next.y, targetY, climbSpeed * Time.fixedDeltaTime);
+        }
+
+        _rb.MovePosition(new Vector3(next.x, y, next.z));
+    }
+
+    /// <summary>(x,z) の真上から下へレイを飛ばし、WalkableSurface の最も高い接点の高さを返す。</summary>
+    private bool TryGetGroundHeight(float x, float z, float currentY, out float groundY)
+    {
+        groundY = 0f;
+        var origin = new Vector3(x, currentY + 5f, z);
+        int n = Physics.RaycastNonAlloc(origin, Vector3.down, _hits, 30f,
+            ~0, QueryTriggerInteraction.Ignore);
+        bool found = false;
+        float best = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            var col = _hits[i].collider;
+            if (col == null) continue;
+            if (col.GetComponentInParent<WalkableSurface>() == null) continue;
+            if (_hits[i].point.y > best) { best = _hits[i].point.y; found = true; }
+        }
+        if (found) groundY = best;
+        return found;
     }
 
     /// <summary>WASD と矢印キーから移動入力 (-1..1) を読む。</summary>
