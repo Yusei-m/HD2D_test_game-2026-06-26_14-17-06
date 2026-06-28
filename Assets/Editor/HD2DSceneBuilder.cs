@@ -83,21 +83,21 @@ public static class HD2DSceneBuilder
 
         // アンビエントは低め＆やや寒色。影を深く見せてコントラストを稼ぐ。
         RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.55f, 0.60f, 0.70f);
-        RenderSettings.ambientEquatorColor = new Color(0.40f, 0.42f, 0.46f);
-        RenderSettings.ambientGroundColor = new Color(0.16f, 0.16f, 0.20f);
-        RenderSettings.ambientIntensity = 0.7f;
+        RenderSettings.ambientSkyColor = new Color(0.72f, 0.76f, 0.84f);
+        RenderSettings.ambientEquatorColor = new Color(0.58f, 0.58f, 0.60f);
+        RenderSettings.ambientGroundColor = new Color(0.30f, 0.30f, 0.32f);
+        RenderSettings.ambientIntensity = 1.1f;
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
         {
             light.type = LightType.Directional;
-            // 低く差し込む強い夕陽。柔らかいが濃い影を落とす。
-            light.color = new Color(1.0f, 0.88f, 0.66f);
-            light.intensity = 1.55f;
+            // 低く差し込む暖かい夕陽。柔らかい影。
+            light.color = new Color(1.0f, 0.91f, 0.74f);
+            light.intensity = 1.4f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.75f;          // 影は深く
-            light.transform.rotation = Quaternion.Euler(42f, -34f, 0f);
+            light.shadowStrength = 0.55f;
+            light.transform.rotation = Quaternion.Euler(45f, -34f, 0f);
         }
     }
 
@@ -509,15 +509,15 @@ public static class HD2DSceneBuilder
         psr.sortingOrder = 20;
         ps.Play();
 
-        // --- 降り注ぐ光（簡易ゴッドレイ）。陽光方向に向けた半透明の加算スプライト ---
-        var lightDir = Object.FindFirstObjectByType<Light>();
+        // --- 降り注ぐ光（簡易ゴッドレイ）。画面の上端から斜めに差し込む、
+        //     ごく薄い加算スジ。中央を照らすスポットにならないよう端へ寄せる。 ---
         var shaftMat = MakeAdditiveMaterial("ShaftMat", mote,
-            new Color(1f, 0.92f, 0.7f, 0.12f));
+            new Color(1f, 0.93f, 0.72f, 0.05f));
         var shaftGo = new GameObject("LightShaft");
         shaftGo.transform.SetParent(cam.transform, false);
-        shaftGo.transform.localPosition = new Vector3(-3f, 4f, 18f);
-        shaftGo.transform.localRotation = Quaternion.Euler(0f, 0f, 28f);
-        shaftGo.transform.localScale = new Vector3(7f, 20f, 1f);
+        shaftGo.transform.localPosition = new Vector3(-7f, 9f, 20f); // 画面左上の奥
+        shaftGo.transform.localRotation = Quaternion.Euler(0f, 0f, 24f);
+        shaftGo.transform.localScale = new Vector3(10f, 30f, 1f);
         var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
         quad.name = "ShaftQuad";
         Object.DestroyImmediate(quad.GetComponent<Collider>());
@@ -721,12 +721,12 @@ public static class HD2DSceneBuilder
         var tone = profile.Add<Tonemapping>(true);
         tone.mode.Override(TonemappingMode.ACES);
 
-        // 光の溢れ（記事: Intensity 2.5 / Threshold 0.6 相当。明るい所が広くにじむ）
+        // 光の溢れ（ハイライトだけ柔らかくにじむ程度に）
         var bloom = profile.Add<Bloom>(true);
-        bloom.intensity.Override(2.0f);
-        bloom.threshold.Override(0.7f);
-        bloom.scatter.Override(0.78f);
-        bloom.tint.Override(new Color(1f, 0.95f, 0.85f));
+        bloom.intensity.Override(1.3f);
+        bloom.threshold.Override(0.9f);
+        bloom.scatter.Override(0.75f);
+        bloom.tint.Override(new Color(1f, 0.96f, 0.88f));
 
         // ティルトシフト風の強い被写界深度（記事: Aperture 最小・Focal 大）。
         var dof = profile.Add<DepthOfField>(true);
@@ -740,32 +740,31 @@ public static class HD2DSceneBuilder
         wb.temperature.Override(5f);
         wb.tint.Override(-6f);
 
-        // 色調整（記事: Hue -13 / Saturation +23。明るさは上げず階調で作る）
+        // 色調整（明るさを少し上げつつ、彩度・コントラストで濃さを出す）
         var ca = profile.Add<ColorAdjustments>(true);
-        ca.postExposure.Override(0f);
-        ca.contrast.Override(16f);
-        ca.hueShift.Override(-6f);
-        ca.saturation.Override(22f);
-        ca.colorFilter.Override(new Color(1.0f, 0.97f, 0.92f));
+        ca.postExposure.Override(0.2f);
+        ca.contrast.Override(12f);
+        ca.hueShift.Override(-4f);
+        ca.saturation.Override(18f);
+        ca.colorFilter.Override(new Color(1.0f, 0.98f, 0.94f));
 
-        // Lift / Gamma / Gain（記事の肝）：影を持ち上げ・中間を暗く・ハイライトを少し抑える。
-        // これで「ただ明るい」ではなく、締まったフィルム調の階調になる。
+        // Lift / Gamma / Gain：影をわずかに持ち上げ・中間を軽く締める（やり過ぎない）。
         var lgg = profile.Add<LiftGammaGain>(true);
-        lgg.lift.Override(new Vector4(1f, 1f, 1.05f, 0.06f));   // 影を少し持ち上げ＋寒色
-        lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.14f));    // 中間を暗く
-        lgg.gain.Override(new Vector4(1f, 0.99f, 0.96f, -0.05f)); // ハイライトを少し抑え＋暖色
+        lgg.lift.Override(new Vector4(1f, 1f, 1.03f, 0.04f));
+        lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.04f));
+        lgg.gain.Override(new Vector4(1f, 1f, 1f, 0.02f));
 
-        // スプリットトーン：影を寒色、ハイライトを暖色に
+        // スプリットトーン：影を寒色、ハイライトを暖色に（控えめ）
         var split = profile.Add<SplitToning>(true);
-        split.shadows.Override(new Color(0.20f, 0.42f, 0.55f));
-        split.highlights.Override(new Color(1.0f, 0.72f, 0.42f));
-        split.balance.Override(-10f);
+        split.shadows.Override(new Color(0.30f, 0.45f, 0.58f));
+        split.highlights.Override(new Color(1.0f, 0.78f, 0.5f));
+        split.balance.Override(-5f);
 
-        // ビネット（記事: Intensity 0.536 / Smoothness 1 / 黒 / 丸）
+        // ビネット（端をほんのり落とす程度に）
         var vig = profile.Add<Vignette>(true);
-        vig.color.Override(Color.black);
-        vig.intensity.Override(0.5f);
-        vig.smoothness.Override(1.0f);
+        vig.color.Override(new Color(0.04f, 0.04f, 0.06f));
+        vig.intensity.Override(0.26f);
+        vig.smoothness.Override(0.6f);
         vig.rounded.Override(true);
 
         EditorUtility.SetDirty(profile);
