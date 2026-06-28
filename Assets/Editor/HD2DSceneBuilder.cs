@@ -83,21 +83,21 @@ public static class HD2DSceneBuilder
 
         // アンビエントは低め＆やや寒色。影を深く見せてコントラストを稼ぐ。
         RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.72f, 0.76f, 0.84f);
-        RenderSettings.ambientEquatorColor = new Color(0.58f, 0.58f, 0.60f);
-        RenderSettings.ambientGroundColor = new Color(0.30f, 0.30f, 0.32f);
-        RenderSettings.ambientIntensity = 1.1f;
+        RenderSettings.ambientSkyColor = new Color(0.95f, 0.94f, 0.98f);
+        RenderSettings.ambientEquatorColor = new Color(0.80f, 0.78f, 0.76f);
+        RenderSettings.ambientGroundColor = new Color(0.48f, 0.46f, 0.44f);
+        RenderSettings.ambientIntensity = 1.5f;
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
         {
             light.type = LightType.Directional;
-            // 低く差し込む暖かい夕陽。柔らかい影。
-            light.color = new Color(1.0f, 0.91f, 0.74f);
-            light.intensity = 1.4f;
+            // 明るく暖かい陽光。柔らかい影。
+            light.color = new Color(1.0f, 0.93f, 0.78f);
+            light.intensity = 1.6f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.55f;
-            light.transform.rotation = Quaternion.Euler(45f, -34f, 0f);
+            light.shadowStrength = 0.5f;
+            light.transform.rotation = Quaternion.Euler(48f, -34f, 0f);
         }
     }
 
@@ -226,6 +226,32 @@ public static class HD2DSceneBuilder
         BuildTree(root, new Vector3(13f, 0f, -4f));
         BuildTree(root, new Vector3(4f, 0f, 12f));
         BuildTree(root, new Vector3(-3f, 0f, -10f));
+
+        // --- 暖かい窓明かり（建物の正面に点光源）---
+        AddWindowGlow(root, new Vector3(-8f, 2.2f, 5.2f));
+        AddWindowGlow(root, new Vector3(-1.5f, 2.4f, 7.2f));
+        AddWindowGlow(root, new Vector3(-8.5f, 1.8f, -1.8f));
+        AddWindowGlow(root, new Vector3(8.5f, 2.6f, -3.2f), 3.0f);
+
+        // --- 道沿いの石灯籠 ---
+        BuildLantern(root, new Vector3(-3.0f, 0f, -1f));
+        BuildLantern(root, new Vector3(3.0f, 0f, 2f));
+        BuildLantern(root, new Vector3(-3.0f, 0f, 7f));
+        BuildLantern(root, new Vector3(3.0f, 0f, -5f));
+
+        // --- 野花を追加（道脇に多めに）---
+        if (blueFlower != null || whiteFlower != null)
+        {
+            ScatterFlowers(root, new Vector3(-6f, 0f, 1.5f), 2.6f, 6, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(6.5f, 0f, 4.5f), 2.6f, 6, blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(-9f, 0f, -4f), 2.2f, 5, blueFlower, whiteFlower, 0.5f);
+        }
+
+        // --- 秋の落ち葉（地面に散乱）---
+        ScatterGroundLeaves(root, 70);
+
+        // --- 背景のランドマーク（赤い橋・石段・多層の赤屋根・看板）---
+        BuildBackgroundLandmark(root);
     }
 
     /// <summary>
@@ -523,6 +549,39 @@ public static class HD2DSceneBuilder
         Object.DestroyImmediate(quad.GetComponent<Collider>());
         quad.transform.SetParent(shaftGo.transform, false);
         quad.GetComponent<Renderer>().sharedMaterial = shaftMat;
+
+        // --- 舞い散る落ち葉 ---
+        Texture2D leafTex = MakeLeafTexture();
+        Material leafMat = MakeAlphaParticleMaterial("LeafMat", leafTex, Color.white);
+        var leavesGo = new GameObject("FallingLeaves");
+        leavesGo.transform.position = new Vector3(0f, 9f, 4f);
+        var lp = leavesGo.AddComponent<ParticleSystem>();
+        lp.Stop();
+        var lmain = lp.main;
+        lmain.loop = true;
+        lmain.startLifetime = 12f;
+        lmain.startSpeed = 0.2f;
+        lmain.startSize = new ParticleSystem.MinMaxCurve(0.18f, 0.34f);
+        lmain.startRotation = new ParticleSystem.MinMaxCurve(0f, 6.28f);
+        lmain.startColor = new ParticleSystem.MinMaxGradient(
+            new Color(0.85f, 0.45f, 0.18f), new Color(0.80f, 0.25f, 0.15f));
+        lmain.gravityModifier = 0.12f;
+        lmain.maxParticles = 200;
+        lmain.simulationSpace = ParticleSystemSimulationSpace.World;
+        var lem = lp.emission; lem.rateOverTime = 10f;
+        var lsh = lp.shape;
+        lsh.shapeType = ParticleSystemShapeType.Box;
+        lsh.scale = new Vector3(46f, 1f, 46f);
+        var lrot = lp.rotationOverLifetime; lrot.enabled = true;
+        lrot.z = new ParticleSystem.MinMaxCurve(-1.2f, 1.2f);
+        var lvel = lp.velocityOverLifetime; lvel.enabled = true;
+        lvel.space = ParticleSystemSimulationSpace.World;
+        lvel.x = new ParticleSystem.MinMaxCurve(-0.4f, 0.4f);
+        lvel.z = new ParticleSystem.MinMaxCurve(-0.3f, 0.3f);
+        var lpsr = lp.GetComponent<ParticleSystemRenderer>();
+        lpsr.material = leafMat;
+        lpsr.renderMode = ParticleSystemRenderMode.Billboard;
+        lp.Play();
     }
 
     private static Texture2D MakeMoteTexture()
@@ -576,6 +635,181 @@ public static class HD2DSceneBuilder
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
         AssetDatabase.CreateAsset(mat, path);
         return mat;
+    }
+
+    private static Material MakeAlphaParticleMaterial(string key, Texture2D tex, Color color)
+    {
+        string path = MatFolder + "/" + key + ".mat";
+        var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (existing != null) return existing;
+        var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+        mat.SetTexture("_BaseMap", tex);
+        mat.SetColor("_BaseColor", color);
+        mat.SetFloat("_Surface", 1f);
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        AssetDatabase.CreateAsset(mat, path);
+        return mat;
+    }
+
+    private static Color[] LeafPixels(int S)
+    {
+        var px = new Color[S * S];
+        float c = (S - 1) * 0.5f;
+        for (int y = 0; y < S; y++)
+            for (int x = 0; x < S; x++)
+            {
+                float nx = (x - c) / (S * 0.32f);
+                float ny = (y - c) / (S * 0.46f);
+                bool inside = nx * nx + ny * ny <= 1f;       // 縦長の葉形
+                Color col = new Color(0, 0, 0, 0);
+                if (inside)
+                {
+                    col = new Color(0.86f, 0.46f, 0.18f, 1f);
+                    if (Mathf.Abs(x - c) < 0.8f) col *= 0.8f; // 中央の葉脈
+                }
+                px[y * S + x] = col;
+            }
+        return px;
+    }
+
+    private static Texture2D MakeLeafTexture()
+    {
+        EnsureFolder("Assets/FX");
+        string path = "Assets/FX/leaf.png";
+        var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (existing != null) return existing;
+        const int S = 24;
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        tex.SetPixels(LeafPixels(S));
+        tex.Apply();
+        File.WriteAllBytes(Path.Combine(Directory.GetCurrentDirectory(), path), tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+        var ti = (TextureImporter)AssetImporter.GetAtPath(path);
+        ti.textureType = TextureImporterType.Default;
+        ti.wrapMode = TextureWrapMode.Clamp;
+        ti.filterMode = FilterMode.Point;
+        ti.textureCompression = TextureImporterCompression.Uncompressed;
+        ti.mipmapEnabled = false;
+        ti.alphaIsTransparency = true;
+        ti.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    private static Sprite MakeLeafSprite()
+    {
+        const int S = 24;
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        tex.SetPixels(LeafPixels(S));
+        tex.Apply();
+        return WriteSprite("leaf", tex, SpriteAlignment.Center);
+    }
+
+    // 暖かい窓明かり（点光源）。窓から光が漏れる雰囲気＋Bloom のもとになる。
+    private static void AddWindowGlow(Transform parent, Vector3 pos, float intensity = 2.2f)
+    {
+        var go = new GameObject("WindowGlow");
+        go.transform.SetParent(parent);
+        go.transform.position = pos;
+        var l = go.AddComponent<Light>();
+        l.type = LightType.Point;
+        l.color = new Color(1.0f, 0.78f, 0.42f);
+        l.intensity = intensity;
+        l.range = 8f;
+        l.shadows = LightShadows.None;
+    }
+
+    // 石灯籠（道沿い）。台座＋柱＋火袋（発光）＋笠。淡い点光源付き。
+    private static void BuildLantern(Transform parent, Vector3 pos)
+    {
+        var root = new GameObject("Lantern").transform;
+        root.SetParent(parent);
+        root.position = pos;
+        var stone = MakeMat("LanternStone", new Color(0.62f, 0.60f, 0.55f), 0.1f);
+        CreateBox("Base", root, pos + new Vector3(0f, 0.12f, 0f), new Vector3(0.5f, 0.24f, 0.5f), stone);
+        CreateBox("Post", root, pos + new Vector3(0f, 0.62f, 0f), new Vector3(0.18f, 0.8f, 0.18f), stone);
+        var glow = MakeMat("LanternGlow", new Color(1f, 0.82f, 0.5f), 0.2f,
+            emission: new Color(1f, 0.66f, 0.32f) * 2.2f);
+        CreateBox("Fire", root, pos + new Vector3(0f, 1.12f, 0f), new Vector3(0.34f, 0.34f, 0.34f), glow, collider: false);
+        CreateBox("Cap", root, pos + new Vector3(0f, 1.36f, 0f), new Vector3(0.6f, 0.16f, 0.6f), stone);
+        AddWindowGlow(root, pos + new Vector3(0f, 1.12f, 0f), 1.3f);
+    }
+
+    // 地面に散らばる落ち葉（フラットなスプライト）。
+    private static void ScatterGroundLeaves(Transform parent, int count)
+    {
+        Sprite leaf = MakeLeafSprite();
+        if (leaf == null) return;
+        var holder = new GameObject("GroundLeaves").transform;
+        holder.SetParent(parent);
+        var rng = new System.Random(424242);
+        Color[] tints =
+        {
+            new Color(0.85f, 0.45f, 0.18f), new Color(0.78f, 0.28f, 0.16f),
+            new Color(0.86f, 0.62f, 0.22f), new Color(0.6f, 0.35f, 0.18f)
+        };
+        for (int i = 0; i < count; i++)
+        {
+            float x = (float)(rng.NextDouble() * 2 - 1) * 22f;
+            float z = (float)(rng.NextDouble() * 2 - 1) * 18f;
+            var go = new GameObject("Leaf");
+            go.transform.SetParent(holder);
+            go.transform.position = new Vector3(x, 0.05f, z);
+            go.transform.rotation = Quaternion.Euler(90f, (float)rng.NextDouble() * 360f, 0f);
+            go.transform.localScale = Vector3.one * (0.25f + (float)rng.NextDouble() * 0.18f);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = leaf;
+            sr.color = tints[rng.Next(tints.Length)];
+        }
+    }
+
+    // 背景のランドマーク：赤い橋・石段・多層の赤屋根の建物・ポケボール看板。
+    private static void BuildBackgroundLandmark(Transform parent)
+    {
+        var root = new GameObject("Landmark").transform;
+        root.SetParent(parent);
+
+        Texture2D stoneTex = LoadTex("Assets/Textures/stone_tile.png") ?? CobbleTexture();
+        var stairMat = MakeTexturedMat("StairStone", stoneTex, new Vector2(2f, 1f), 0.1f);
+        var red = MakeMat("RedPaint", new Color(0.74f, 0.16f, 0.14f), 0.15f);
+        var redRoof = MakeMat("RedRoofTier", new Color(0.66f, 0.18f, 0.16f), 0.08f);
+        var wall = MakeTexturedMat("WallCream",
+            PlasterTexture("PlasterCream", new Color(0.90f, 0.86f, 0.74f)), new Vector2(2f, 2f), 0.04f);
+
+        // 石段（中央奥へ上る）
+        for (int i = 0; i < 10; i++)
+            CreateBox("Stair" + i, root, new Vector3(0f, 0.15f + i * 0.28f, 15f + i * 0.95f),
+                new Vector3(6f, 0.3f, 1.1f), stairMat);
+
+        // 赤い橋（石段の手前）
+        CreateBox("BridgeDeck", root, new Vector3(0f, 0.25f, 13f), new Vector3(4.5f, 0.2f, 2.4f),
+            MakeMat("BridgeWood", new Color(0.5f, 0.34f, 0.22f), 0.1f));
+        CreateBox("BridgeRailL", root, new Vector3(0f, 0.7f, 12.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
+        CreateBox("BridgeRailR", root, new Vector3(0f, 0.7f, 14.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
+
+        // 多層の赤屋根の建物（ポケモンセンター風）。石段の上、霧の奥。
+        Vector3 b = new Vector3(2.5f, 0f, 27f);
+        CreateBox("PC_Base", root, b + new Vector3(0f, 2.6f, 0f), new Vector3(9f, 5.2f, 8f), stairMat);
+        CreateBox("PC_Tier1", root, b + new Vector3(0f, 6.2f, 0f), new Vector3(7.5f, 2.4f, 6.5f), wall);
+        CreateBox("PC_Roof1", root, b + new Vector3(0f, 7.7f, 0f), new Vector3(8.6f, 0.7f, 7.6f), redRoof);
+        CreateBox("PC_Tier2", root, b + new Vector3(0f, 9f, 0f), new Vector3(5f, 2f, 4.5f), wall);
+        CreateBox("PC_Roof2", root, b + new Vector3(0f, 10.4f, 0f), new Vector3(6f, 0.6f, 5.5f), redRoof);
+        AddWindowGlow(root, b + new Vector3(0f, 6f, -3.5f), 3.0f);
+
+        // ポケボール看板（柱＋白板＋赤い半円）
+        Vector3 sp = new Vector3(6.5f, 0f, 22f);
+        CreateBox("Sign_Post", root, sp + new Vector3(0f, 1.2f, 0f), new Vector3(0.18f, 2.4f, 0.18f),
+            MakeMat("SignPost", new Color(0.4f, 0.28f, 0.18f), 0.1f));
+        CreateBox("Sign_BoardW", root, sp + new Vector3(0f, 2.6f, 0f), new Vector3(1.4f, 0.7f, 0.12f),
+            MakeMat("SignWhite", new Color(0.95f, 0.95f, 0.95f), 0.1f));
+        CreateBox("Sign_BoardR", root, sp + new Vector3(0f, 2.95f, -0.02f), new Vector3(1.4f, 0.35f, 0.13f),
+            MakeMat("SignRed", new Color(0.8f, 0.18f, 0.16f), 0.1f,
+                emission: new Color(0.7f, 0.15f, 0.13f)));
+        CreateBox("Sign_Dot", root, sp + new Vector3(0f, 2.6f, -0.03f), new Vector3(0.22f, 0.22f, 0.14f),
+            MakeMat("SignDot", new Color(0.1f, 0.1f, 0.1f), 0.1f));
     }
 
     private static void BuildTree(Transform parent, Vector3 pos)
@@ -737,34 +971,35 @@ public static class HD2DSceneBuilder
 
         // ホワイトバランス（記事: Temperature やや暖色 / Tint 少し緑）
         var wb = profile.Add<WhiteBalance>(true);
-        wb.temperature.Override(5f);
-        wb.tint.Override(-6f);
+        wb.temperature.Override(11f);
+        wb.tint.Override(-4f);
 
-        // 色調整（明るさを少し上げつつ、彩度・コントラストで濃さを出す）
+        // 暖色のホワイトバランス（オクトパスの黄金色）
+        // 色調整：明るく・暖かく・鮮やかに（中間を暗くしない）
         var ca = profile.Add<ColorAdjustments>(true);
-        ca.postExposure.Override(0.2f);
-        ca.contrast.Override(12f);
-        ca.hueShift.Override(-4f);
-        ca.saturation.Override(18f);
-        ca.colorFilter.Override(new Color(1.0f, 0.98f, 0.94f));
+        ca.postExposure.Override(0.45f);   // 全体を明るく
+        ca.contrast.Override(10f);
+        ca.hueShift.Override(-3f);
+        ca.saturation.Override(24f);       // 鮮やかに
+        ca.colorFilter.Override(new Color(1.0f, 0.98f, 0.92f));
 
-        // Lift / Gamma / Gain：影をわずかに持ち上げ・中間を軽く締める（やり過ぎない）。
+        // Lift / Gamma / Gain：暗部を持ち上げ・中間も少し明るく（締めすぎない）
         var lgg = profile.Add<LiftGammaGain>(true);
-        lgg.lift.Override(new Vector4(1f, 1f, 1.03f, 0.04f));
-        lgg.gamma.Override(new Vector4(1f, 1f, 1f, -0.04f));
-        lgg.gain.Override(new Vector4(1f, 1f, 1f, 0.02f));
+        lgg.lift.Override(new Vector4(1f, 1f, 1.02f, 0.05f));
+        lgg.gamma.Override(new Vector4(1f, 1f, 1f, 0.05f));
+        lgg.gain.Override(new Vector4(1f, 1f, 1f, 0.03f));
 
-        // スプリットトーン：影を寒色、ハイライトを暖色に（控えめ）
+        // スプリットトーン：影をわずかに寒色、ハイライトを暖色に（控えめ）
         var split = profile.Add<SplitToning>(true);
-        split.shadows.Override(new Color(0.30f, 0.45f, 0.58f));
-        split.highlights.Override(new Color(1.0f, 0.78f, 0.5f));
-        split.balance.Override(-5f);
+        split.shadows.Override(new Color(0.40f, 0.50f, 0.60f));
+        split.highlights.Override(new Color(1.0f, 0.82f, 0.55f));
+        split.balance.Override(0f);
 
-        // ビネット（端をほんのり落とす程度に）
+        // ビネット（端をほんのり落とす程度に・軽め）
         var vig = profile.Add<Vignette>(true);
-        vig.color.Override(new Color(0.04f, 0.04f, 0.06f));
-        vig.intensity.Override(0.26f);
-        vig.smoothness.Override(0.6f);
+        vig.color.Override(new Color(0.06f, 0.05f, 0.05f));
+        vig.intensity.Override(0.2f);
+        vig.smoothness.Override(0.7f);
         vig.rounded.Override(true);
 
         EditorUtility.SetDirty(profile);
