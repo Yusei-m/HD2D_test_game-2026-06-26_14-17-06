@@ -103,7 +103,12 @@ public static class HD2DSceneBuilder
     // ===================================================================
     private static void BuildGround()
     {
-        var grass = MakeTexturedMat("Grass", GrassTexture(), new Vector2(20f, 20f), 0.03f);
+        // ユーザー提供の地面素材（Assets/Textures/*_tile.png）を優先。無ければ手続き生成。
+        Texture2D grassTex = LoadTex("Assets/Textures/grass_tile.png") ?? GrassTexture();
+        Texture2D dirtTex = LoadTex("Assets/Textures/dirt_tile.png") ?? DirtTexture();
+        Texture2D stoneTex = LoadTex("Assets/Textures/stone_tile.png") ?? CobbleTexture();
+
+        var grass = MakeTexturedMat("GroundGrass", grassTex, new Vector2(18f, 18f), 0.03f);
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
         ground.name = "Ground";
         ground.transform.position = Vector3.zero;
@@ -111,19 +116,21 @@ public static class HD2DSceneBuilder
         ground.GetComponent<Renderer>().sharedMaterial = grass;
 
         // 土の道（薄い箱を地面に重ねる）
-        var dirtTex = DirtTexture();
-        var roadMat = MakeTexturedMat("DirtRoad", dirtTex, new Vector2(2f, 18f), 0.04f);
+        var roadMat = MakeTexturedMat("GroundDirt", dirtTex, new Vector2(2f, 18f), 0.04f);
         CreateBox("Road_Main", null, new Vector3(0f, 0.02f, 0f),
             new Vector3(3.5f, 0.04f, 36f), roadMat, collider: false);
-        var roadMatCross = MakeTexturedMat("DirtRoadCross", dirtTex, new Vector2(11f, 2f), 0.04f);
+        var roadMatCross = MakeTexturedMat("GroundDirtCross", dirtTex, new Vector2(11f, 2f), 0.04f);
         CreateBox("Road_Cross", null, new Vector3(0f, 0.02f, 4f),
             new Vector3(22f, 0.04f, 3.5f), roadMatCross, collider: false);
 
         // 石畳（右の建物前）
-        var stoneMat = MakeTexturedMat("StonePath", CobbleTexture(), new Vector2(3f, 3f), 0.12f);
+        var stoneMat = MakeTexturedMat("GroundStone", stoneTex, new Vector2(3.5f, 4f), 0.12f);
         CreateBox("StonePath", null, new Vector3(8f, 0.03f, -2f),
             new Vector3(7f, 0.04f, 8f), stoneMat, collider: false);
     }
+
+    private static Texture2D LoadTex(string path) =>
+        AssetDatabase.LoadAssetAtPath<Texture2D>(path);
 
     // ===================================================================
     //  街並み
@@ -184,20 +191,28 @@ public static class HD2DSceneBuilder
         // --- 風車（右奥）---
         BuildWindmill(root, new Vector3(11.5f, 0f, 8f), matCream);
 
-        // --- 中央の花壇（フェンス囲い）---
-        BuildFlowerPlot(root, new Vector3(-5.5f, 0f, -3.5f));
+        // ユーザー提供の花スプライト（背景透過済み）。無ければ発光キューブで代替。
+        Sprite blueFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_blue.png");
+        Sprite whiteFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_white.png");
 
-        // --- 散らばった花（青いクリスタル花 / 白い花）---
-        var blueFlower = MakeMat("BlueFlower", new Color(0.45f, 0.75f, 0.95f), 0.2f,
-            emission: new Color(0.25f, 0.55f, 0.85f) * 1.5f);
-        var whiteFlower = MakeMat("WhiteFlower", new Color(0.95f, 0.97f, 0.98f), 0.2f,
-            emission: new Color(0.5f, 0.55f, 0.6f));
-        CreateBox("Flowers_Blue", root, new Vector3(-6.5f, 0.06f, -3.5f),
-            new Vector3(1.6f, 0.12f, 1.6f), blueFlower, collider: false);
-        CreateBox("Flowers_White", root, new Vector3(-4.5f, 0.06f, -3.5f),
-            new Vector3(1.6f, 0.12f, 1.6f), whiteFlower, collider: false);
-        CreateBox("Flowers_White2", root, new Vector3(9f, 0.06f, 2.5f),
-            new Vector3(1.4f, 0.12f, 1.2f), whiteFlower, collider: false);
+        // --- 中央の花壇（フェンス囲い）---
+        BuildFlowerPlot(root, new Vector3(-5.5f, 0f, -3.5f), blueFlower, whiteFlower);
+
+        // --- 散らばった花 ---
+        if (blueFlower != null || whiteFlower != null)
+        {
+            ScatterFlowers(root, new Vector3(9f, 0f, 2.5f), 2.0f, 5,
+                blueFlower, whiteFlower, 0.5f);
+            ScatterFlowers(root, new Vector3(-10.5f, 0f, 3.5f), 2.0f, 4,
+                blueFlower, whiteFlower, 0.5f);
+        }
+        else
+        {
+            var blueMat = MakeMat("BlueFlower", new Color(0.45f, 0.75f, 0.95f), 0.2f,
+                emission: new Color(0.25f, 0.55f, 0.85f) * 1.5f);
+            CreateBox("Flowers_Blue", root, new Vector3(-6.5f, 0.06f, -3.5f),
+                new Vector3(1.6f, 0.12f, 1.6f), blueMat, collider: false);
+        }
 
         // --- 木 ---
         BuildTree(root, new Vector3(-12f, 0f, 2f));
@@ -321,7 +336,8 @@ public static class HD2DSceneBuilder
         }
     }
 
-    private static void BuildFlowerPlot(Transform parent, Vector3 center)
+    private static void BuildFlowerPlot(Transform parent, Vector3 center,
+        Sprite blueFlower, Sprite whiteFlower)
     {
         var root = new GameObject("FlowerPlot").transform;
         root.SetParent(parent);
@@ -358,23 +374,66 @@ public static class HD2DSceneBuilder
             MakeTexturedMat("PlotSoil", DirtTexture(), new Vector2(2f, 2f), 0.04f),
             collider: false);
 
-        // 参考画像のような、青いクリスタル花と白い花を多数自然に配置。
-        var blue = MakeMat("CrystalBlue", new Color(0.40f, 0.72f, 0.96f), 0.4f,
-            emission: new Color(0.30f, 0.62f, 0.95f) * 2.2f);
-        var white = MakeMat("FlowerWhite", new Color(0.95f, 0.97f, 0.98f), 0.3f,
-            emission: new Color(0.55f, 0.62f, 0.66f) * 1.2f);
-        var rng = new System.Random(20260627);
-        // 左半分を青、右半分を白に寄せつつ、ばらつかせる。
-        for (int i = 0; i < 26; i++)
+        // 花壇に花スプライトを配置（左を青、右を白に寄せる）。スプライトが無ければ
+        // 発光キューブで代替。
+        if (blueFlower != null || whiteFlower != null)
         {
-            float fx = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
-            float fz = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
-            bool isBlue = fx < (rng.NextDouble() - 0.5) * 0.6;
-            float h = 0.18f + (float)rng.NextDouble() * 0.22f;
-            CreateBox(isBlue ? "FlowerBlue" : "FlowerWhite", root,
-                center + new Vector3(fx, 0.1f + h * 0.5f, fz),
-                new Vector3(0.18f, h, 0.18f),
-                isBlue ? blue : white, collider: false);
+            var rng = new System.Random(20260627);
+            for (int i = 0; i < 22; i++)
+            {
+                float fx = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+                float fz = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+                bool isBlue = fx < (rng.NextDouble() - 0.5) * 0.6;
+                Sprite s = isBlue ? (blueFlower ?? whiteFlower) : (whiteFlower ?? blueFlower);
+                float worldH = 0.55f + (float)rng.NextDouble() * 0.25f;
+                PlaceFlowerSprite(root, s, center + new Vector3(fx, 0.1f, fz), worldH);
+            }
+        }
+        else
+        {
+            var blue = MakeMat("CrystalBlue", new Color(0.40f, 0.72f, 0.96f), 0.4f,
+                emission: new Color(0.30f, 0.62f, 0.95f) * 2.2f);
+            var rng = new System.Random(20260627);
+            for (int i = 0; i < 22; i++)
+            {
+                float fx = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+                float fz = (float)(rng.NextDouble() * 2 - 1) * (half - 0.4f);
+                float h = 0.2f + (float)rng.NextDouble() * 0.2f;
+                CreateBox("FlowerBlue", root, center + new Vector3(fx, 0.1f + h * 0.5f, fz),
+                    new Vector3(0.18f, h, 0.18f), blue, collider: false);
+            }
+        }
+    }
+
+    /// <summary>地面に立つ花スプライト（Y軸ビルボード）を1本置く。</summary>
+    private static void PlaceFlowerSprite(Transform parent, Sprite sprite,
+        Vector3 groundPos, float worldHeight)
+    {
+        if (sprite == null) return;
+        var go = new GameObject("Flower");
+        go.transform.SetParent(parent);
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = sprite;
+        float h = sprite.bounds.size.y;
+        float s = (h > 0.001f) ? worldHeight / h : 1f;
+        go.transform.localScale = Vector3.one * s;
+        // スプライトの中心ピボット → 底面を地面に合わせるため半分持ち上げる
+        go.transform.position = groundPos + new Vector3(0f, worldHeight * 0.5f, 0f);
+        go.AddComponent<Billboard>();
+    }
+
+    /// <summary>指定中心の周りに花スプライトを散らす。</summary>
+    private static void ScatterFlowers(Transform parent, Vector3 center, float radius,
+        int count, Sprite blue, Sprite white, float baseHeight)
+    {
+        var rng = new System.Random(center.GetHashCode());
+        for (int i = 0; i < count; i++)
+        {
+            float fx = (float)(rng.NextDouble() * 2 - 1) * radius;
+            float fz = (float)(rng.NextDouble() * 2 - 1) * radius;
+            Sprite s = (rng.NextDouble() < 0.5) ? (blue ?? white) : (white ?? blue);
+            float worldH = baseHeight + (float)rng.NextDouble() * 0.25f;
+            PlaceFlowerSprite(parent, s, center + new Vector3(fx, 0f, fz), worldH);
         }
     }
 
