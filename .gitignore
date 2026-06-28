@@ -105,3 +105,17 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# ===== macOS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ===== IDE =====
+.idea/
+.vscode/
+
+# ===== Unity-MCP server binary cache (this environment can corrupt the download) =====
+/[Ll]ibrary/mcp-server/
+mcp-server/
