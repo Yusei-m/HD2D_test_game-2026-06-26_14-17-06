@@ -159,44 +159,22 @@ public static class HD2DSceneBuilder
         var matRoofSlate = MakeTexturedMat("MatRoofSlate", roofSlate, new Vector2(3f, 1.5f), 0.05f);
         var matRoofBrown = MakeTexturedMat("MatRoofBrown", roofBrown, new Vector2(3f, 1.5f), 0.05f);
 
-        // --- 家 A（左奥）：GLB モデル。無ければプリミティブにフォールバック ---
-        if (PlaceBuilding(root, "TownHouseA", "Assets/Models/house1.glb",
-                new Vector3(-8f, 0f, 7f), 0f, 5.0f) == null)
-            BuildHouse(root, "TownHouseA", new Vector3(-8f, 0f, 7f),
-                new Vector3(4f, 3f, 4f), matCream, matRoofSlate);
-
-        // --- 家 B（中央奥）---
-        if (PlaceBuilding(root, "TownHouseB", "Assets/Models/house2.glb",
-                new Vector3(-1.5f, 0f, 9f), 0f, 5.0f) == null)
-            BuildHouse(root, "TownHouseB", new Vector3(-1.5f, 0f, 9f),
-                new Vector3(4f, 3.2f, 4f), matStone, matRoofSlate);
-
-        // --- 店（左手前）---
-        if (PlaceBuilding(root, "Store", "Assets/Models/shop.glb",
-                new Vector3(-8.5f, 0f, 0f), 0f, 4.6f) == null)
-        {
-            BuildHouse(root, "Store", new Vector3(-8.5f, 0f, 0f),
-                new Vector3(3.6f, 2.6f, 3.6f), matBrick, matRoofBrown);
-            // 店のひさし（フォールバック時のみ）
-            CreateBox("Store_Awning", root, new Vector3(-8.5f, 2.0f, -1.9f),
-                new Vector3(3.8f, 0.25f, 1.2f),
-                MakeMat("Awning", new Color(0.8f, 0.32f, 0.3f), 0.1f));
-        }
-
-        // --- 右の大きな建物（教会風・アーチ）---
-        BuildHouse(root, "ChapelHouse", new Vector3(8.5f, 0f, -1f),
-            new Vector3(5f, 4f, 5.5f), matStone, matRoofSlate);
-        // アーチ（円柱を横倒し）
-        var arch = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        arch.name = "Arch";
-        arch.transform.SetParent(root);
-        arch.transform.position = new Vector3(6.0f, 2.2f, -3.2f);
-        arch.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        arch.transform.localScale = new Vector3(1.6f, 1.6f, 1.6f);
-        arch.GetComponent<Renderer>().sharedMaterial = matBrick;
-
-        // --- 風車（右奥）---
-        BuildWindmill(root, new Vector3(11.5f, 0f, 8f), matCream);
+        // --- 街並みは渡された GLB モデルの建物のみで構成（正面がカメラ側を向くよう yaw 180）。
+        //     モデルが無いときだけプリミティブにフォールバック。 ---
+        // 左側（道の西）
+        PlaceTownBuilding(root, "House_L1", "Assets/Models/shop.glb",
+            new Vector3(-8.5f, 0f, 0f), 4.8f, matBrick, matRoofBrown);
+        PlaceTownBuilding(root, "House_L2", "Assets/Models/house1.glb",
+            new Vector3(-9f, 0f, 6.5f), 5.0f, matCream, matRoofSlate);
+        PlaceTownBuilding(root, "House_L3", "Assets/Models/house2.glb",
+            new Vector3(-9f, 0f, 13f), 5.0f, matStone, matRoofSlate);
+        // 右側（道の東）
+        PlaceTownBuilding(root, "House_R1", "Assets/Models/house2.glb",
+            new Vector3(8.5f, 0f, -1f), 5.0f, matStone, matRoofSlate);
+        PlaceTownBuilding(root, "House_R2", "Assets/Models/house1.glb",
+            new Vector3(9f, 0f, 5.5f), 5.0f, matCream, matRoofSlate);
+        PlaceTownBuilding(root, "House_R3", "Assets/Models/shop.glb",
+            new Vector3(9f, 0f, 12f), 4.8f, matBrick, matRoofBrown);
 
         // ユーザー提供の花スプライト（背景透過済み）。無ければ発光キューブで代替。
         Sprite blueFlower = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Sprites/flower_blue.png");
@@ -252,6 +230,17 @@ public static class HD2DSceneBuilder
 
         // --- 背景のランドマーク（赤い橋・石段・多層の赤屋根・看板）---
         BuildBackgroundLandmark(root);
+    }
+
+    /// <summary>
+    /// GLB の建物を配置（yaw 180＝正面をカメラ側へ）。無ければプリミティブで代替。
+    /// </summary>
+    private static void PlaceTownBuilding(Transform parent, string name, string model,
+        Vector3 pos, float width, Material wallFb, Material roofFb)
+    {
+        if (PlaceBuilding(parent, name, model, pos, 180f, width) == null)
+            BuildHouse(parent, name, pos,
+                new Vector3(width * 0.78f, 3f, width * 0.78f), wallFb, roofFb);
     }
 
     /// <summary>
@@ -790,14 +779,16 @@ public static class HD2DSceneBuilder
         CreateBox("BridgeRailL", root, new Vector3(0f, 0.7f, 12.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
         CreateBox("BridgeRailR", root, new Vector3(0f, 0.7f, 14.0f), new Vector3(4.5f, 0.7f, 0.16f), red);
 
-        // 多層の赤屋根の建物（ポケモンセンター風）。石段の上、霧の奥。
+        // 石段の上、霧の奥に建物（GLB モデル）。土台だけ石で作り、その上に建物を載せる。
         Vector3 b = new Vector3(2.5f, 0f, 27f);
         CreateBox("PC_Base", root, b + new Vector3(0f, 2.6f, 0f), new Vector3(9f, 5.2f, 8f), stairMat);
-        CreateBox("PC_Tier1", root, b + new Vector3(0f, 6.2f, 0f), new Vector3(7.5f, 2.4f, 6.5f), wall);
-        CreateBox("PC_Roof1", root, b + new Vector3(0f, 7.7f, 0f), new Vector3(8.6f, 0.7f, 7.6f), redRoof);
-        CreateBox("PC_Tier2", root, b + new Vector3(0f, 9f, 0f), new Vector3(5f, 2f, 4.5f), wall);
-        CreateBox("PC_Roof2", root, b + new Vector3(0f, 10.4f, 0f), new Vector3(6f, 0.6f, 5.5f), redRoof);
-        AddWindowGlow(root, b + new Vector3(0f, 6f, -3.5f), 3.0f);
+        if (PlaceBuilding(root, "PC_Building", "Assets/Models/house2.glb",
+                b + new Vector3(0f, 5.2f, 0f), 180f, 8f) == null)
+        {
+            CreateBox("PC_Tier1", root, b + new Vector3(0f, 6.4f, 0f), new Vector3(7.5f, 2.4f, 6.5f), wall);
+            CreateBox("PC_Roof1", root, b + new Vector3(0f, 7.9f, 0f), new Vector3(8.6f, 0.7f, 7.6f), redRoof);
+        }
+        AddWindowGlow(root, b + new Vector3(0f, 6.5f, -3.5f), 3.0f);
 
         // ポケボール看板（柱＋白板＋赤い半円）
         Vector3 sp = new Vector3(6.5f, 0f, 22f);
