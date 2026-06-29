@@ -13,8 +13,9 @@ using UnityEngine;
 public static class HD2DAutoBuild
 {
     private const string ScenePath = "Assets/Scenes/HD2D_Town.unity";
-    // ビジュアルを刷新したのでバージョンを上げ、既存の生成済みシーンも作り直す。
-    private const string PrefKey = "HD2D_AutoBuilt_v17";
+    // 明るさ（露出/環境光/Bloom）と被写界深度を調整したのでバージョンを上げ、
+    // 既存の生成済みシーン・ボリュームプロファイルを作り直す。
+    private const string PrefKey = "HD2D_AutoBuilt_v18";
 
     static HD2DAutoBuild()
     {

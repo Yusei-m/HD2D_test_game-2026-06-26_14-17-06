@@ -78,25 +78,25 @@ public static class HD2DSceneBuilder
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
         RenderSettings.fogColor = skyColor;
-        RenderSettings.fogStartDistance = 26f;   // 近景はくっきり、遠景だけ霞ませる
-        RenderSettings.fogEndDistance = 95f;
+        RenderSettings.fogStartDistance = 38f;   // 近景〜中景はくっきり、遠景だけ淡く霞ませる
+        RenderSettings.fogEndDistance = 140f;
 
-        // アンビエントは低め＆やや寒色。影を深く見せてコントラストを稼ぐ。
+        // アンビエントは控えめに。影を深く見せてコントラストを稼ぐ（明るすぎると白飛びする）。
         RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.95f, 0.94f, 0.98f);
-        RenderSettings.ambientEquatorColor = new Color(0.80f, 0.78f, 0.76f);
-        RenderSettings.ambientGroundColor = new Color(0.48f, 0.46f, 0.44f);
-        RenderSettings.ambientIntensity = 1.5f;
+        RenderSettings.ambientSkyColor = new Color(0.62f, 0.63f, 0.68f);
+        RenderSettings.ambientEquatorColor = new Color(0.50f, 0.49f, 0.47f);
+        RenderSettings.ambientGroundColor = new Color(0.30f, 0.28f, 0.26f);
+        RenderSettings.ambientIntensity = 1.0f;
 
         var light = Object.FindFirstObjectByType<Light>();
         if (light != null)
         {
             light.type = LightType.Directional;
-            // 明るく暖かい陽光。柔らかい影。
-            light.color = new Color(1.0f, 0.93f, 0.78f);
-            light.intensity = 1.6f;
+            // 暖かい陽光。柔らかい影。
+            light.color = new Color(1.0f, 0.94f, 0.82f);
+            light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.5f;
+            light.shadowStrength = 0.6f;
             light.transform.rotation = Quaternion.Euler(48f, -34f, 0f);
         }
     }
@@ -1004,19 +1004,19 @@ public static class HD2DSceneBuilder
         var tone = profile.Add<Tonemapping>(true);
         tone.mode.Override(TonemappingMode.ACES);
 
-        // 光の溢れ（ハイライトだけ柔らかくにじむ程度に）
+        // 光の溢れ（ハイライトだけ柔らかくにじむ程度に。閾値を上げ強度を抑え白飛びを防ぐ）
         var bloom = profile.Add<Bloom>(true);
-        bloom.intensity.Override(1.3f);
-        bloom.threshold.Override(0.9f);
-        bloom.scatter.Override(0.75f);
+        bloom.intensity.Override(0.7f);
+        bloom.threshold.Override(1.1f);
+        bloom.scatter.Override(0.6f);
         bloom.tint.Override(new Color(1f, 0.96f, 0.88f));
 
-        // ティルトシフト風の強い被写界深度（記事: Aperture 最小・Focal 大）。
+        // ティルトシフト風の被写界深度（絞りを開けすぎると画面全体がボケて視認性が落ちるため中庸に）。
         var dof = profile.Add<DepthOfField>(true);
         dof.mode.Override(DepthOfFieldMode.Bokeh);
         dof.focusDistance.Override(17f);   // 俯瞰視点でのプレイヤーまでの距離に合わせる
-        dof.focalLength.Override(135f);
-        dof.aperture.Override(1.6f);       // ほぼ最小絞り＝極浅い被写界深度
+        dof.focalLength.Override(75f);
+        dof.aperture.Override(5.6f);       // 中庸の絞り＝遠近だけ程よくボカし手前は視認可能
 
         // ホワイトバランス（記事: Temperature やや暖色 / Tint 少し緑）
         var wb = profile.Add<WhiteBalance>(true);
@@ -1026,17 +1026,17 @@ public static class HD2DSceneBuilder
         // 暖色のホワイトバランス（オクトパスの黄金色）
         // 色調整：明るく・暖かく・鮮やかに（中間を暗くしない）
         var ca = profile.Add<ColorAdjustments>(true);
-        ca.postExposure.Override(0.45f);   // 全体を明るく
-        ca.contrast.Override(10f);
+        ca.postExposure.Override(0.0f);    // 露出は素のまま（+0.45 は白飛びの主因だったため撤去）
+        ca.contrast.Override(8f);
         ca.hueShift.Override(-3f);
-        ca.saturation.Override(24f);       // 鮮やかに
+        ca.saturation.Override(14f);       // ほどよく鮮やかに
         ca.colorFilter.Override(new Color(1.0f, 0.98f, 0.92f));
 
-        // Lift / Gamma / Gain：暗部を持ち上げ・中間も少し明るく（締めすぎない）
+        // Lift / Gamma / Gain：暗部をわずかに持ち上げる程度（明るく締めすぎない）
         var lgg = profile.Add<LiftGammaGain>(true);
-        lgg.lift.Override(new Vector4(1f, 1f, 1.02f, 0.05f));
-        lgg.gamma.Override(new Vector4(1f, 1f, 1f, 0.05f));
-        lgg.gain.Override(new Vector4(1f, 1f, 1f, 0.03f));
+        lgg.lift.Override(new Vector4(1f, 1f, 1.01f, 0.02f));
+        lgg.gamma.Override(new Vector4(1f, 1f, 1f, 0f));
+        lgg.gain.Override(new Vector4(1f, 1f, 1f, 0f));
 
         // スプリットトーン：影をわずかに寒色、ハイライトを暖色に（控えめ）
         var split = profile.Add<SplitToning>(true);
