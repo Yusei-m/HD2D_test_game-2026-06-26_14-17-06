@@ -14,16 +14,16 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 10
-  m_Fog: 1
-  m_FogColor: {r: 0.95, g: 0.82, b: 0.68, a: 1}
-  m_FogMode: 2
-  m_FogDensity: 0.012
-  m_LinearFogStart: 25
-  m_LinearFogEnd: 120
-  m_AmbientSkyColor: {r: 0.45, g: 0.4, b: 0.34, a: 1}
-  m_AmbientEquatorColor: {r: 0.32, g: 0.25, b: 0.2, a: 1}
-  m_AmbientGroundColor: {r: 0.15, g: 0.11, b: 0.08, a: 1}
-  m_AmbientIntensity: 1.15
+  m_Fog: 0
+  m_FogColor: {r: 0.85, g: 0.78, b: 0.68, a: 1}
+  m_FogMode: 3
+  m_FogDensity: 0.008
+  m_LinearFogStart: 40
+  m_LinearFogEnd: 160
+  m_AmbientSkyColor: {r: 0.39, g: 0.36, b: 0.32, a: 1}
+  m_AmbientEquatorColor: {r: 0.27, g: 0.23, b: 0.19, a: 1}
+  m_AmbientGroundColor: {r: 0.13, g: 0.1, b: 0.07, a: 1}
+  m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
   m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
@@ -284,8 +284,8 @@ Light:
   m_Enabled: 1
   serializedVersion: 11
   m_Type: 1
-  m_Color: {r: 1, g: 0.88, b: 0.71, a: 1}
-  m_Intensity: 1.6
+  m_Color: {r: 1, g: 0.91, b: 0.78, a: 1}
+  m_Intensity: 1.25
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
